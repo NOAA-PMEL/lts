@@ -1,0 +1,36 @@
+{
+  "discovery": {
+    "temperature": {
+      "question": "Stations with Temperature",
+      "search": [
+          {
+            "join": "or",
+            "short_names": ["TEMP"],
+            "standard_names": ["sea_water_temperature"],
+            "datasets": [
+              "https://data.pmel.noaa.gov/pmel/erddap/tabledap/keo_hourly",
+              "https://data.pmel.noaa.gov/pmel/erddap/tabledap/papa_hourly_temp",
+              "https://data.pmel.noaa.gov/pmel/erddap/tabledap/pirata_hourly_temp",
+              "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_temp"
+            ]
+          }
+      ]
+    },
+    "salinity": {
+      "question": "Stations with Salinity",
+      "search": [
+        {
+          "join": "or",
+          "short_names": ["PSAL"],
+          "standard_names": ["sea_water_practical_salinity"],
+          "datasets": [
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/keo_hourly",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/papa_hourly_psal",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/pirata_hourly_psal",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_psal"
+          ]
+        }
+      ]
+    }
+  }
+}
