@@ -105,8 +105,7 @@ for dataset in platform_json['config']['datasets']:
 
 pp = pprint.PrettyPrinter(indent=4)
 
-with open('key.txt') as key:
-    ESRI_API_KEY = key.readline()
+ESRI_API_KEY = os.environ.get('ESRI_API_KEY')
 
 discovery_file = 'lts_discovery.json'
 if discovery_file is None:
@@ -127,10 +126,6 @@ for key in discover_json['discovery']:
 radio_value = None
 if len(radio_options) >= 1:
     radio_value = radio_options[0]['value']
-
-with open('key.txt') as key:
-    ESRI_API_KEY = key.readline()
-
 
 
 for dataset in platform_json['config']['datasets']:
