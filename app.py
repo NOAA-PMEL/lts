@@ -6,6 +6,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 
+## TEMPORARY (I hope) hack because the certificate on datalocal is not great
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 # pytyony stuff
 import os
 import sys
@@ -22,7 +26,7 @@ import urllib
 # My stuff
 from sdig.erddap.info import Info
 
-version = 'v1.4'  # Add units to y-axis label
+version = 'v1.5'  # Rearrange labels, improve formatting font sizes, add legend on plot
 empty_color = '#999999'
 has_data_color = 'black'
 
@@ -91,15 +95,17 @@ for dataset in platform_json['config']['datasets']:
     mdf = pd.read_csv(locations_url, skiprows=[1],
                       dtype={'wmo_platform_code': str, 'site_code': str, 'latitude': np.float64,
                              'longitude': np.float64})
-    mdf['did'] = did
+    
     if mdf.shape[0] > 1 and mdf.site_code.nunique() <= 1:
+        platform = mdf['wmo_platform_code'].unique()
+        site = mdf['site_code'].unique()
         adf = mdf.mean(axis=0, numeric_only=True)
-        adf['site_code'] = mdf['site_code'].iloc[0]
-        mdf = pd.DataFrame(columns=['latitude', 'longitude', 'site_code'], index=[0], )
+        mdf = pd.DataFrame(columns=['latitude', 'longitude', 'site_code', 'wmo_platform_code'], index=[0], )
         mdf['latitude'] = adf.loc['latitude']
         mdf['longitude'] = adf.loc['longitude']
-        mdf['site_code'] = adf.loc['site_code']
-        mdf['wmo_platform_code'] = adf.loc['wmo_platform_code']
+        mdf['site_code'] = site
+        mdf['wmo_platform_code'] = platform
+    mdf['did'] = did
     locations_by_did[did] = json.dumps(mdf.to_json())
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -449,6 +455,7 @@ def record_map_change(relay_data):
     ], prevent_initial_call=True
 )
 def update_platform_state(in_start_date, in_end_date, in_data_question):
+    print('update platform state')
     time_constraint = ''
     all_with_data = None
     all_without_data = None
@@ -486,12 +493,20 @@ def update_platform_state(in_start_date, in_end_date, in_data_question):
                                                         dtype={'site_code': str,
                                                                'latitude': np.float64,
                                                                'longitude': np.float64})
-                        have_url = dataset_to_check + '.csv?' + short_names + time_constraint
+                        have_url = dataset_to_check + '.csv?' + short_names + urllib.parse.quote(time_constraint, safe='&()=:/')
                         have = None
                         try:
+                            print(have_url)
                             have = pd.read_csv(have_url, skiprows=[1])
-                        except:
-                            pass
+                        except Exception as he:
+                            print(he)
+                            if 'httpError' in type(he).__class__.__name__:
+                                html_response = he.read()
+                                encoding = he.headers.get_content_charset('utf-8')
+                                decoded_html = html_response.decode(encoding)
+                                print(decoded_html)
+                                print('exception getting counts on ' + have_url)
+                                pass
                         if have is not None:
                             csum = have.groupby(['site_code']).sum().reset_index()
                             csum['site_code'] = csum['site_code'].astype(str)
@@ -721,6 +736,8 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
         col.children = []
         sub_plots = {}
         sub_plot_titles = []
+        bottom_titles = []
+        legends = []
         y_titles = []
         row_h = []
         p_idx = 0
@@ -745,13 +762,15 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                         # TODO do we need to find the depth_name for every data set?
                         vlist.append('depth')
                         pvars = ','.join(vlist)
-                        sub_title = current_dataset['title'] + ' at ' + selected_platform
-                        p_url = p_url + '.csv?' + pvars + plot_time + '&site_code="' + selected_platform + '"'
+                        sub_title = selected_platform
+                        bottom_title = current_dataset['title']
+                        p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
                         p_url = p_url + '&depth<3.5'  # use only surface for time series
                         days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
                         factor = int((days_in_request * 24) / max_time_series_points)
                         if factor > 0:
-                            p_url = p_url + '&orderByClosest("depth,time/' + str(factor) + 'day")'
+                            sub_sample = '"depth,time/' +  str(factor) + 'day"' 
+                            p_url = p_url + '&orderByClosest(' + urllib.parse.quote(sub_sample, safe='&()=:/') + ')'
                             fre = factor * 24
                             sfre = str(fre) + 'H'
                             if factor == 1:
@@ -774,11 +793,14 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                         #     plot_data = plot_data.sample(n=sub_sample_limit).sort_values('time')
                         #     sub_title = sub_title + ' (timeseries sub-sampled to ' + str(sub_sample_limit) + ' points) '
                         sub_plot_titles.append(sub_title)
+                        bottom_titles.append(bottom_title)
                         plot_units = ''
+                        leg_mem = []
                         for vidx, p_var in enumerate(search['short_names']):
+                            leg_mem.append(p_var)
                             if p_var in units_by_did[p_did]:
                                 plot_units = '(' + units_by_did[p_did][p_var] + ')'
-                                y_titles.append(plot_units)
+                            y_titles.append(p_var + ' ' + plot_units)
                             plot_line_color = px.colors.qualitative.Plotly[vidx]
                             plot_data['text'] = p_var + '<br>' + plot_data['text_time'] + '<br>' + plot_data[
                                 p_var].apply(lambda x: '{0:.2f}'.format(x))
@@ -793,6 +815,7 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                                                  legendgroup=p_idx,
                                                  )
                             traces.append(trace)
+                        legends.append(leg_mem)
                         sub_plots[p_did] = traces
         figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
                                shared_yaxes=False,
@@ -805,6 +828,38 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                 figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
         figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
         figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap)
+        figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
+        for bidx, bt in enumerate(bottom_titles):
+            figure.add_annotation(
+                xref='x domain',
+                yref='y domain',
+                xanchor='right',
+                yanchor='bottom',
+                x=1.0,
+                y=-.4,
+                font_size=18,
+                text=bt,
+                showarrow=False,
+                row=(bidx+1), 
+                col=1,
+                bgcolor='rgba(255,255,255,.85)',
+            )
+            plot_legends = legends[bidx]
+            for pli, leg_entry in enumerate(plot_legends):
+                figure.add_annotation(
+                    xref='x domain',
+                    yref='y domain',
+                    xanchor='left',
+                    x=0.01,
+                    y=.95-(pli/10),
+                    font_size=14,
+                    font_color=px.colors.qualitative.Plotly[pli],
+                    text=u'<b>\u23AF\u23AF\u23AF\u23AF</b>  '+leg_entry,
+                    showarrow=False,
+                    row=(bidx+1), 
+                    col=1,
+                    bgcolor='rgba(255,255,255,.85)',
+                )
         figure.update_xaxes({
             'ticklabelmode': 'period',
             'showticklabels': True,
@@ -814,14 +869,27 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'tickformatstops' : [
+                    dict(dtickrange=[1000, 60000], value="%H:%M:%S\n%d%b%Y"),
+                    dict(dtickrange=[60000, 3600000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[3600000, 86400000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[86400000, 604800000], value="%e\n%b %Y"),
+                    dict(dtickrange=[604800000, "M1"], value="%b\n%Y"),
+                    dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
+                    dict(dtickrange=["M12", None], value="%Y")
+                ]
+            })
         figure.update_yaxes({'gridcolor': line_rgb,
                              'zeroline': True,
                              'zerolinecolor': line_rgb,
                              'showline': True,
                              'linewidth': 1,
                              'linecolor': line_rgb,
-                             'mirror': True})
+                             'mirror': True,
+                             })
+
         query = '?start_date=' + plot_start_date + '&end_date=' + plot_end_date + '&q=' + question_choice
         query = query + '&site_code=' + selected_platform + '&lat=' + str(selected_json['lat'])
         query = query + '&lon=' + str(selected_json['lon'])
@@ -879,6 +947,7 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
         col.children = []
         sub_plots = {}
         sub_plot_titles = []
+        bottom_titles = []
         y_titles = []
         row_h = []
         p_idx = 0
@@ -910,7 +979,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         meta_item = dbc.ListGroupItem(current_dataset['title'] + ' at ' + selected_platform,
                                                       href=p_url, target='_blank')
                         link_group.children.append(meta_item)
-                        sub_title = current_dataset['title'] + ' at ' + selected_platform
+                        sub_title = selected_platform
+                        bottom_title = current_dataset['title']
                         p_url = p_url + '.csv?' + pvars + plot_time + '&site_code="' + selected_platform + '"'
                         # make the data URL's at the full resoltion without subsampling
                         item = dbc.ListGroupItem('.html', href=p_url.replace('.csv', '.htmlTable'), target='_blank')
@@ -935,11 +1005,13 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
                         traces = []
                         sub_plot_titles.append(sub_title)
+                        bottom_titles.append(bottom_title)
+                        plot_units = ''
                         for vidx, p_var in enumerate(search['short_names']):
                             read_data = read_data[read_data[p_var].notna()]
-                            if p_var in units_by_did[p_did]:
-                                plot_units = '(' + units_by_did[p_did][p_var] + ')'
-                                y_titles.append(plot_units)
+                            if d_name in units_by_did[p_did]:
+                                plot_units = '(' + units_by_did[p_did][d_name] + ')'
+                            y_titles.append(d_name + ' ' + plot_units)
                             read_data['text'] = p_var + '<br>' + read_data['text_time'] + '<br>' + \
                                                 d_name + '=' + read_data[d_name].astype(str) + '<br>' + \
                                                 p_var + '=' + read_data[p_var].apply(lambda x: '{0:.2f}'.format(x))
@@ -965,12 +1037,29 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                                shared_yaxes=False,
                                row_heights=row_h)
         graph_height = height_of_profile_row * len(sub_plot_titles)
+        figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
         for pidx, plt_did in enumerate(sub_plots):
             p_traces = sub_plots[plt_did]
             for p_trace in p_traces:
                 figure.add_trace(p_trace, row=pidx + 1, col=1)
                 figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
-        figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
+                figure.add_annotation()
+            bt = bottom_titles[pidx]
+            figure.add_annotation(
+                xref='x domain',
+                yref='y domain',
+                xanchor='right',
+                yanchor='bottom',
+                x=1.0,
+                y=-.25,
+                font_size=18,
+                text=bt,
+                showarrow=False,
+                row=(pidx+1), 
+                col=1,
+                bgcolor='rgba(255,255,255,.85)',
+            )
+        figure['layout'].update(height=graph_height) #, margin=dict(l=80, r=80, b=80, t=80, ))
         figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
         figure.update_xaxes({
             'ticklabelmode': 'period',
@@ -981,7 +1070,18 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'tickformatstops' : [
+                    dict(dtickrange=[1000, 60000], value="%H:%M:%S\n%d%b%Y"),
+                    dict(dtickrange=[60000, 3600000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[3600000, 86400000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[86400000, 604800000], value="%e\n%b %Y"),
+                    dict(dtickrange=[604800000, "M1"], value="%b\n%Y"),
+                    dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
+                    dict(dtickrange=["M12", None], value="%Y")
+                ]            
+            })
         figure.update_yaxes({
             'autorange': 'reversed',
             'gridcolor': line_rgb,
