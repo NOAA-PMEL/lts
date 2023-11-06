@@ -89,7 +89,7 @@ for dataset in platform_json['config']['datasets']:
         all_end = end_date
     title = info.get_title()
     dataset['title'] = title
-    variables_list, long_names, units, standard_names = info.get_variables()
+    variables_list, long_names, units, standard_names, d_types = info.get_variables()
     units_by_did[did] = units
     variables_by_did[did] = variables_list
     mdf = pd.read_csv(locations_url, skiprows=[1],
@@ -169,7 +169,7 @@ app.layout = \
                             dbc.Col(width=3, style={'display': 'flex', 'align-items': 'left'}, children=[
                                 html.A(
                                     dbc.NavbarBrand(
-                                        'Long-term time series Data Discovery', className="ml-2",
+                                        'Long time series ', className="ml-2",
                                         style={
                                             'padding-top': '160px',
                                             'font-size': '2.5em',
@@ -180,7 +180,16 @@ app.layout = \
                                     style={'text-decoration': 'none'}
                                 )]
                                     ),
-                            dbc.Col(width=4),
+                              dbc.Col(width=4), # empty space, replace with message if needed
+                            # dbc.Col(width=4, children=[
+                            #     html.Div(children=[
+                            #     html.Div('Parts of the US government are closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. See ', style={'display':'inline'}), 
+                            #     html.A('www.weather.gov', href='https://www.weather.gov', style={'display':'inline'}), 
+                            #     html.Div(' for critical weather information. To learn more, see ', style={'display': 'inline'}), 
+                            #     html.A('www.commerce.gov', href='https://www.commerce.gov', style={'display':'inline'}), 
+                            #     html.Div('.', style={'display':'inline'}),
+                            #     ], style={'display':'inline'})
+                            # ]),
                             dbc.Col(width=3, children=[
                                 dcc.Loading(id='nav-loader', children=[
                                     html.Div(id='loading-div'),
@@ -1009,6 +1018,7 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         plot_units = ''
                         for vidx, p_var in enumerate(search['short_names']):
                             read_data = read_data[read_data[p_var].notna()]
+                            read_data = read_data[read_data['time'].notna()]
                             if d_name in units_by_did[p_did]:
                                 plot_units = '(' + units_by_did[p_did][d_name] + ')'
                             y_titles.append(d_name + ' ' + plot_units)
@@ -1062,6 +1072,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
         figure['layout'].update(height=graph_height) #, margin=dict(l=80, r=80, b=80, t=80, ))
         figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
         figure.update_xaxes({
+            # 'range':[read_data['time'].min(), read_data['time'].max()],
+            'autorange': True,
             'ticklabelmode': 'period',
             'showticklabels': True,
             'gridcolor': line_rgb,
@@ -1081,7 +1093,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                     dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
                     dict(dtickrange=["M12", None], value="%Y")
                 ]            
-            })
+            }
+            )
         figure.update_yaxes({
             'autorange': 'reversed',
             'gridcolor': line_rgb,
