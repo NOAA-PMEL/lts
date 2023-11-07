@@ -1072,8 +1072,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
         figure['layout'].update(height=graph_height) #, margin=dict(l=80, r=80, b=80, t=80, ))
         figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
         figure.update_xaxes({
-            # 'range':[read_data['time'].min(), read_data['time'].max()],
-            'autorange': True,
+            'range':[read_data['time'].min(), read_data['time'].max()],
+            # 'autorange': True,
             'ticklabelmode': 'period',
             'showticklabels': True,
             'gridcolor': line_rgb,
