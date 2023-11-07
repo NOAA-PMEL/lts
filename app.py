@@ -26,7 +26,7 @@ import urllib
 # My stuff
 from sdig.erddap.info import Info
 
-version = 'v1.5'  # Rearrange labels, improve formatting font sizes, add legend on plot
+version = 'v1.5.1'  # Set range on time axis of profile. Set title.
 empty_color = '#999999'
 has_data_color = 'black'
 
@@ -140,6 +140,7 @@ app = dash.Dash(__name__,
                 )
 
 app._favicon = 'favicon.ico'
+app.title = 'LTS'
 server = app.server
 
 app.layout = \
