@@ -862,7 +862,7 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                     xanchor='left',
                     x=0.01,
                     y=.95-(pli/10),
-                    font_size=14,
+                    font_size=16,
                     font_color=px.colors.qualitative.Plotly[pli],
                     text=u'<b>\u23AF\u23AF\u23AF\u23AF</b>  '+leg_entry,
                     showarrow=False,
@@ -898,6 +898,8 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                              'linewidth': 1,
                              'linecolor': line_rgb,
                              'mirror': True,
+                             'tickfont': {'size': 16},
+                             'titlefont': {'size': 16},
                              })
 
         query = '?start_date=' + plot_start_date + '&end_date=' + plot_end_date + '&q=' + question_choice
@@ -1032,16 +1034,22 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                                                  mode='markers',
                                                  hovertext=read_data['text'],
                                                  marker=dict(
+                                                     cmin=read_data[p_var].min(),
+                                                     cmax=read_data[p_var].max(),
                                                      color=read_data[p_var],
                                                      colorscale='inferno',
                                                      colorbar=dict(
-                                                         title=p_var
+                                                        title_side='right',
+                                                        title_font_size=16,
+                                                        tickfont_size=16,
+                                                        title_text=p_var + ' (' + units_by_did[p_did][p_var] + ')'
                                                      )
                                                  ),
                                                  hoverinfo="text",
                                                  hoverlabel=dict(namelength=-1),
                                                  legendgroup=p_idx,
                                                  )
+
                             traces.append(trace)
                         sub_plots[p_did] = traces
         figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
@@ -1049,6 +1057,7 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                                row_heights=row_h)
         graph_height = height_of_profile_row * len(sub_plot_titles)
         figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
+
         for pidx, plt_did in enumerate(sub_plots):
             p_traces = sub_plots[plt_did]
             for p_trace in p_traces:
@@ -1071,6 +1080,9 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                 bgcolor='rgba(255,255,255,.85)',
             )
         figure['layout'].update(height=graph_height) #, margin=dict(l=80, r=80, b=80, t=80, ))
+        figure.update_coloraxes({
+
+        })
         figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
         figure.update_xaxes({
             'range':[read_data['time'].min(), read_data['time'].max()],
@@ -1104,7 +1116,10 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'titlefont': {'size': 16},
+            })
 
     return [plot_title, figure, list_group, '']
 
