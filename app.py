@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import dash_design_kit as ddk
 
 ## TEMPORARY (I hope) hack because the certificate on datalocal is not great
 import ssl
@@ -278,7 +279,7 @@ app.layout = \
                     dbc.CardHeader(id='plot-card-title'),
                     dbc.CardBody(id='plot-card-body', children=[
                         dcc.Loading(
-                            dcc.Graph(id='plot-graph', config=graph_config)
+                            ddk.Graph(id='plot-graph', config=graph_config)
                         )
                     ])
                 ]),
@@ -286,7 +287,7 @@ app.layout = \
                     dbc.CardHeader(id='profile-card-title'),
                     dbc.CardBody(id='profile-card-body', children=[
                         dcc.Loading(
-                            dcc.Graph(id='profile-graph', config=graph_config)
+                            ddk.Graph(id='profile-graph', config=graph_config)
                         )
                     ])
                 ])
@@ -837,7 +838,7 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                 figure.add_trace(p_trace, row=pidx + 1, col=1)
                 figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
         figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
-        figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap)
+        figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap, paper_bgcolor="white")
         figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
         for bidx, bt in enumerate(bottom_titles):
             figure.add_annotation(
@@ -846,8 +847,8 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                 xanchor='right',
                 yanchor='bottom',
                 x=1.0,
-                y=-.4,
-                font_size=18,
+                y=-.45,
+                font_size=22,
                 text=bt,
                 showarrow=False,
                 row=(bidx+1), 
@@ -1072,14 +1073,14 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                 yanchor='bottom',
                 x=1.0,
                 y=-.25,
-                font_size=18,
+                font_size=22,
                 text=bt,
                 showarrow=False,
                 row=(pidx+1), 
                 col=1,
                 bgcolor='rgba(255,255,255,.85)',
             )
-        figure['layout'].update(height=graph_height) #, margin=dict(l=80, r=80, b=80, t=80, ))
+        figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ), paper_bgcolor="white", plot_bgcolor='white')
         figure.update_coloraxes({
 
         })
