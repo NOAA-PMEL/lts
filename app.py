@@ -5,6 +5,11 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import dash_design_kit as ddk
+
+## TEMPORARY (I hope) hack because the certificate on datalocal is not great
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # pytyony stuff
 import os
@@ -20,9 +25,9 @@ import flask
 import urllib
 
 # My stuff
-import sdig.erddap.info as info
+from sdig.erddap.info import Info
 
-version = 'v1.4'  # Add units to y-axis label
+version = 'v1.5.1'  # Set range on time axis of profile. Set title.
 empty_color = '#999999'
 has_data_color = 'black'
 
@@ -55,7 +60,7 @@ platform_file = 'lts_sites.json'
 if platform_file is None:
     platform_file = os.getenv('PLATFORMS_JSON')
 
-platform_json = None
+platform_json = {}
 if platform_file is not None:
     with open(platform_file) as platform_stream:
         platform_json = json.load(platform_stream)
@@ -74,39 +79,38 @@ for dataset in platform_json['config']['datasets']:
     locations_url = dataset['locations']
     did = url[url.rindex('/') + 1:]
     dataset['id'] = did
-    info_url = info.get_info_url(url)
-    info_df = pd.read_csv(info_url)
-    start_date, end_date, start_date_seconds, end_date_seconds = info.get_times(info_df)
-    dsg_type = info.get_dsg_type(info_df)
+    info = Info(url)
+    start_date, end_date, start_date_seconds, end_date_seconds = info.get_times()
+    dsg_type = info.get_dsg_type()
     if start_date_seconds < all_start_seconds:
         all_start_seconds = start_date_seconds
         all_start = start_date
     if end_date_seconds > all_end_seconds:
         all_end_seconds = end_date_seconds
         all_end = end_date
-    title = info.get_title(info_df)
+    title = info.get_title()
     dataset['title'] = title
-    variables_list, long_names, units, standard_names = info.get_variables(info_df)
+    variables_list, long_names, units, standard_names, d_types = info.get_variables()
     units_by_did[did] = units
     variables_by_did[did] = variables_list
     mdf = pd.read_csv(locations_url, skiprows=[1],
-                      dtype={'wmo_platform_code': str, 'site_code': str, 'latitude': np.float64,
-                             'longitude': np.float64})
-    mdf['did'] = did
+                      dtype={'wmo_platform_code': str, 'site_code': str, 'latitude': np.float64, 'longitude': np.float64})
+    
     if mdf.shape[0] > 1 and mdf.site_code.nunique() <= 1:
+        platform = mdf['wmo_platform_code'].unique()
+        site = mdf['site_code'].unique()
         adf = mdf.mean(axis=0, numeric_only=True)
-        adf['site_code'] = mdf['site_code'].iloc[0]
-        mdf = pd.DataFrame(columns=['latitude', 'longitude', 'site_code'], index=[0], )
+        mdf = pd.DataFrame(columns=['latitude', 'longitude', 'site_code', 'wmo_platform_code'], index=[0], )
         mdf['latitude'] = adf.loc['latitude']
         mdf['longitude'] = adf.loc['longitude']
-        mdf['site_code'] = adf.loc['site_code']
-        mdf['wmo_platform_code'] = adf.loc['wmo_platform_code']
+        mdf['site_code'] = site
+        mdf['wmo_platform_code'] = platform
+    mdf['did'] = did
     locations_by_did[did] = json.dumps(mdf.to_json())
 
 pp = pprint.PrettyPrinter(indent=4)
 
-with open('key.txt') as key:
-    ESRI_API_KEY = key.readline()
+ESRI_API_KEY = os.environ.get('ESRI_API_KEY')
 
 discovery_file = 'lts_discovery.json'
 if discovery_file is None:
@@ -128,18 +132,7 @@ radio_value = None
 if len(radio_options) >= 1:
     radio_value = radio_options[0]['value']
 
-with open('key.txt') as key:
-    ESRI_API_KEY = key.readline()
-
-
-
-for dataset in platform_json['config']['datasets']:
-    url = dataset['url']
-    info_url = info.get_info_url(url)
-    info_df = pd.read_csv(info_url)
-
-
-time_marks = info.get_time_marks(all_start_seconds, all_end_seconds)
+time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
 app = dash.Dash(__name__,
                 external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP],
@@ -147,6 +140,7 @@ app = dash.Dash(__name__,
                 )
 
 app._favicon = 'favicon.ico'
+app.title = 'LTS'
 server = app.server
 
 app.layout = \
@@ -176,7 +170,7 @@ app.layout = \
                             dbc.Col(width=3, style={'display': 'flex', 'align-items': 'left'}, children=[
                                 html.A(
                                     dbc.NavbarBrand(
-                                        'Long-term time series Data Discovery', className="ml-2",
+                                        'Long time series ', className="ml-2",
                                         style={
                                             'padding-top': '160px',
                                             'font-size': '2.5em',
@@ -187,7 +181,16 @@ app.layout = \
                                     style={'text-decoration': 'none'}
                                 )]
                                     ),
-                            dbc.Col(width=4),
+                              dbc.Col(width=4), # empty space, replace with message if needed
+                            # dbc.Col(width=4, children=[
+                            #     html.Div(children=[
+                            #     html.Div('Parts of the US government are closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. See ', style={'display':'inline'}), 
+                            #     html.A('www.weather.gov', href='https://www.weather.gov', style={'display':'inline'}), 
+                            #     html.Div(' for critical weather information. To learn more, see ', style={'display': 'inline'}), 
+                            #     html.A('www.commerce.gov', href='https://www.commerce.gov', style={'display':'inline'}), 
+                            #     html.Div('.', style={'display':'inline'}),
+                            #     ], style={'display':'inline'})
+                            # ]),
                             dbc.Col(width=3, children=[
                                 dcc.Loading(id='nav-loader', children=[
                                     html.Div(id='loading-div'),
@@ -275,7 +278,7 @@ app.layout = \
                     dbc.CardHeader(id='plot-card-title'),
                     dbc.CardBody(id='plot-card-body', children=[
                         dcc.Loading(
-                            dcc.Graph(id='plot-graph', config=graph_config)
+                            ddk.Graph(id='plot-graph', config=graph_config)
                         )
                     ])
                 ]),
@@ -283,7 +286,7 @@ app.layout = \
                     dbc.CardHeader(id='profile-card-title'),
                     dbc.CardBody(id='profile-card-body', children=[
                         dcc.Loading(
-                            dcc.Graph(id='profile-graph', config=graph_config)
+                            ddk.Graph(id='profile-graph', config=graph_config)
                         )
                     ])
                 ])
@@ -462,6 +465,7 @@ def record_map_change(relay_data):
     ], prevent_initial_call=True
 )
 def update_platform_state(in_start_date, in_end_date, in_data_question):
+    print('update platform state')
     time_constraint = ''
     all_with_data = None
     all_without_data = None
@@ -499,12 +503,20 @@ def update_platform_state(in_start_date, in_end_date, in_data_question):
                                                         dtype={'site_code': str,
                                                                'latitude': np.float64,
                                                                'longitude': np.float64})
-                        have_url = dataset_to_check + '.csv?' + short_names + time_constraint
+                        have_url = dataset_to_check + '.csv?' + short_names + urllib.parse.quote(time_constraint, safe='&()=:/')
                         have = None
                         try:
+                            print(have_url)
                             have = pd.read_csv(have_url, skiprows=[1])
-                        except:
-                            pass
+                        except Exception as he:
+                            print(he)
+                            if 'httpError' in type(he).__class__.__name__:
+                                html_response = he.read()
+                                encoding = he.headers.get_content_charset('utf-8')
+                                decoded_html = html_response.decode(encoding)
+                                print(decoded_html)
+                                print('exception getting counts on ' + have_url)
+                                pass
                         if have is not None:
                             csum = have.groupby(['site_code']).sum().reset_index()
                             csum['site_code'] = csum['site_code'].astype(str)
@@ -734,6 +746,8 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
         col.children = []
         sub_plots = {}
         sub_plot_titles = []
+        bottom_titles = []
+        legends = []
         y_titles = []
         row_h = []
         p_idx = 0
@@ -758,13 +772,15 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                         # TODO do we need to find the depth_name for every data set?
                         vlist.append('depth')
                         pvars = ','.join(vlist)
-                        sub_title = current_dataset['title'] + ' at ' + selected_platform
-                        p_url = p_url + '.csv?' + pvars + plot_time + '&site_code="' + selected_platform + '"'
+                        sub_title = selected_platform
+                        bottom_title = current_dataset['title']
+                        p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
                         p_url = p_url + '&depth<3.5'  # use only surface for time series
                         days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
                         factor = int((days_in_request * 24) / max_time_series_points)
                         if factor > 0:
-                            p_url = p_url + '&orderByClosest("depth,time/' + str(factor) + 'day")'
+                            sub_sample = '"depth,time/' +  str(factor) + 'day"' 
+                            p_url = p_url + '&orderByClosest(' + urllib.parse.quote(sub_sample, safe='&()=:/') + ')'
                             fre = factor * 24
                             sfre = str(fre) + 'H'
                             if factor == 1:
@@ -787,11 +803,14 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                         #     plot_data = plot_data.sample(n=sub_sample_limit).sort_values('time')
                         #     sub_title = sub_title + ' (timeseries sub-sampled to ' + str(sub_sample_limit) + ' points) '
                         sub_plot_titles.append(sub_title)
+                        bottom_titles.append(bottom_title)
                         plot_units = ''
+                        leg_mem = []
                         for vidx, p_var in enumerate(search['short_names']):
+                            leg_mem.append(p_var)
                             if p_var in units_by_did[p_did]:
                                 plot_units = '(' + units_by_did[p_did][p_var] + ')'
-                                y_titles.append(plot_units)
+                            y_titles.append(p_var + ' ' + plot_units)
                             plot_line_color = px.colors.qualitative.Plotly[vidx]
                             plot_data['text'] = p_var + '<br>' + plot_data['text_time'] + '<br>' + plot_data[
                                 p_var].apply(lambda x: '{0:.2f}'.format(x))
@@ -806,6 +825,7 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                                                  legendgroup=p_idx,
                                                  )
                             traces.append(trace)
+                        legends.append(leg_mem)
                         sub_plots[p_did] = traces
         figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
                                shared_yaxes=False,
@@ -817,7 +837,39 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                 figure.add_trace(p_trace, row=pidx + 1, col=1)
                 figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
         figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
-        figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap)
+        figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap, paper_bgcolor="white")
+        figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
+        for bidx, bt in enumerate(bottom_titles):
+            figure.add_annotation(
+                xref='x domain',
+                yref='y domain',
+                xanchor='right',
+                yanchor='bottom',
+                x=1.0,
+                y=-.45,
+                font_size=22,
+                text=bt,
+                showarrow=False,
+                row=(bidx+1), 
+                col=1,
+                bgcolor='rgba(255,255,255,.85)',
+            )
+            plot_legends = legends[bidx]
+            for pli, leg_entry in enumerate(plot_legends):
+                figure.add_annotation(
+                    xref='x domain',
+                    yref='y domain',
+                    xanchor='left',
+                    x=0.01,
+                    y=.95-(pli/10),
+                    font_size=16,
+                    font_color=px.colors.qualitative.Plotly[pli],
+                    text=u'<b>\u23AF\u23AF\u23AF\u23AF</b>  '+leg_entry,
+                    showarrow=False,
+                    row=(bidx+1), 
+                    col=1,
+                    bgcolor='rgba(255,255,255,.85)',
+                )
         figure.update_xaxes({
             'ticklabelmode': 'period',
             'showticklabels': True,
@@ -827,14 +879,29 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'tickformatstops' : [
+                    dict(dtickrange=[1000, 60000], value="%H:%M:%S\n%d%b%Y"),
+                    dict(dtickrange=[60000, 3600000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[3600000, 86400000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[86400000, 604800000], value="%e\n%b %Y"),
+                    dict(dtickrange=[604800000, "M1"], value="%b\n%Y"),
+                    dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
+                    dict(dtickrange=["M12", None], value="%Y")
+                ]
+            })
         figure.update_yaxes({'gridcolor': line_rgb,
                              'zeroline': True,
                              'zerolinecolor': line_rgb,
                              'showline': True,
                              'linewidth': 1,
                              'linecolor': line_rgb,
-                             'mirror': True})
+                             'mirror': True,
+                             'tickfont': {'size': 16},
+                             'titlefont': {'size': 16},
+                             })
+
         query = '?start_date=' + plot_start_date + '&end_date=' + plot_end_date + '&q=' + question_choice
         query = query + '&site_code=' + selected_platform + '&lat=' + str(selected_json['lat'])
         query = query + '&lon=' + str(selected_json['lon'])
@@ -892,6 +959,7 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
         col.children = []
         sub_plots = {}
         sub_plot_titles = []
+        bottom_titles = []
         y_titles = []
         row_h = []
         p_idx = 0
@@ -923,7 +991,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         meta_item = dbc.ListGroupItem(current_dataset['title'] + ' at ' + selected_platform,
                                                       href=p_url, target='_blank')
                         link_group.children.append(meta_item)
-                        sub_title = current_dataset['title'] + ' at ' + selected_platform
+                        sub_title = selected_platform
+                        bottom_title = current_dataset['title']
                         p_url = p_url + '.csv?' + pvars + plot_time + '&site_code="' + selected_platform + '"'
                         # make the data URL's at the full resoltion without subsampling
                         item = dbc.ListGroupItem('.html', href=p_url.replace('.csv', '.htmlTable'), target='_blank')
@@ -948,11 +1017,14 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
                         traces = []
                         sub_plot_titles.append(sub_title)
+                        bottom_titles.append(bottom_title)
+                        plot_units = ''
                         for vidx, p_var in enumerate(search['short_names']):
                             read_data = read_data[read_data[p_var].notna()]
-                            if p_var in units_by_did[p_did]:
-                                plot_units = '(' + units_by_did[p_did][p_var] + ')'
-                                y_titles.append(plot_units)
+                            read_data = read_data[read_data['time'].notna()]
+                            if d_name in units_by_did[p_did]:
+                                plot_units = '(' + units_by_did[p_did][d_name] + ')'
+                            y_titles.append(d_name + ' ' + plot_units)
                             read_data['text'] = p_var + '<br>' + read_data['text_time'] + '<br>' + \
                                                 d_name + '=' + read_data[d_name].astype(str) + '<br>' + \
                                                 p_var + '=' + read_data[p_var].apply(lambda x: '{0:.2f}'.format(x))
@@ -962,30 +1034,59 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                                                  mode='markers',
                                                  hovertext=read_data['text'],
                                                  marker=dict(
+                                                     cmin=read_data[p_var].min(),
+                                                     cmax=read_data[p_var].max(),
                                                      color=read_data[p_var],
                                                      colorscale='inferno',
                                                      colorbar=dict(
-                                                         title=p_var
+                                                        title_side='right',
+                                                        title_font_size=16,
+                                                        tickfont_size=16,
+                                                        title_text=p_var + ' (' + units_by_did[p_did][p_var] + ')'
                                                      )
                                                  ),
                                                  hoverinfo="text",
                                                  hoverlabel=dict(namelength=-1),
                                                  legendgroup=p_idx,
                                                  )
+
                             traces.append(trace)
                         sub_plots[p_did] = traces
         figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
                                shared_yaxes=False,
                                row_heights=row_h)
         graph_height = height_of_profile_row * len(sub_plot_titles)
+        figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
+
         for pidx, plt_did in enumerate(sub_plots):
             p_traces = sub_plots[plt_did]
             for p_trace in p_traces:
                 figure.add_trace(p_trace, row=pidx + 1, col=1)
                 figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
-        figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
+                figure.add_annotation()
+            bt = bottom_titles[pidx]
+            figure.add_annotation(
+                xref='x domain',
+                yref='y domain',
+                xanchor='right',
+                yanchor='bottom',
+                x=1.0,
+                y=-.25,
+                font_size=22,
+                text=bt,
+                showarrow=False,
+                row=(pidx+1), 
+                col=1,
+                bgcolor='rgba(255,255,255,.85)',
+            )
+        figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ), paper_bgcolor="white", plot_bgcolor='white')
+        figure.update_coloraxes({
+
+        })
         figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
         figure.update_xaxes({
+            'range':[read_data['time'].min(), read_data['time'].max()],
+            # 'autorange': True,
             'ticklabelmode': 'period',
             'showticklabels': True,
             'gridcolor': line_rgb,
@@ -994,7 +1095,19 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'tickformatstops' : [
+                    dict(dtickrange=[1000, 60000], value="%H:%M:%S\n%d%b%Y"),
+                    dict(dtickrange=[60000, 3600000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[3600000, 86400000], value="%H:%M\n%d%b%Y"),
+                    dict(dtickrange=[86400000, 604800000], value="%e\n%b %Y"),
+                    dict(dtickrange=[604800000, "M1"], value="%b\n%Y"),
+                    dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
+                    dict(dtickrange=["M12", None], value="%Y")
+                ]            
+            }
+            )
         figure.update_yaxes({
             'autorange': 'reversed',
             'gridcolor': line_rgb,
@@ -1003,7 +1116,10 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
             'showline': True,
             'linewidth': 1,
             'linecolor': line_rgb,
-            'mirror': True})
+            'mirror': True,
+            'tickfont': {'size': 16},
+            'titlefont': {'size': 16},
+            })
 
     return [plot_title, figure, list_group, '']
 
