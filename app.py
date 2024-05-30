@@ -60,7 +60,7 @@ platform_file = 'lts_sites.json'
 if platform_file is None:
     platform_file = os.getenv('PLATFORMS_JSON')
 
-platform_json = None
+platform_json = {}
 if platform_file is not None:
     with open(platform_file) as platform_stream:
         platform_json = json.load(platform_stream)
@@ -94,8 +94,7 @@ for dataset in platform_json['config']['datasets']:
     units_by_did[did] = units
     variables_by_did[did] = variables_list
     mdf = pd.read_csv(locations_url, skiprows=[1],
-                      dtype={'wmo_platform_code': str, 'site_code': str, 'latitude': np.float64,
-                             'longitude': np.float64})
+                      dtype={'wmo_platform_code': str, 'site_code': str, 'latitude': np.float64, 'longitude': np.float64})
     
     if mdf.shape[0] > 1 and mdf.site_code.nunique() <= 1:
         platform = mdf['wmo_platform_code'].unique()
