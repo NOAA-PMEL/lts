@@ -1,6 +1,6 @@
 # Dash
 import dash
-from dash import Dash, callback, html, dcc, dash_table, Input, Output, State, MATCH, ALL
+from dash import Dash, callback, html, dcc, dash_table, Input, Output, State, MATCH, ALL, CeleryManager, DiskcacheManager
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -26,6 +26,16 @@ import urllib
 
 # My stuff
 from sdig.erddap.info import Info
+
+if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
+    # For testing...
+    import diskcache
+    cache = diskcache.Cache("./cache")
+    background_callback_manager = DiskcacheManager(cache)
+else:
+    # For production...
+    from celery import celery
+    background_callback_manager = CeleryManager(celery_app)
 
 version = 'v1.5.1'  # Set range on time axis of profile. Set title.
 empty_color = '#999999'
@@ -136,7 +146,7 @@ time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
 app = dash.Dash(__name__,
                 external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP],
-                # requests_pathname_prefix='/dashboard/oceansites/'
+                background_callback_manager=background_callback_manager
                 )
 
 app._favicon = 'favicon.ico'
@@ -712,7 +722,7 @@ def update_selected_platform(click, initial_site):
     [
         State('radio-items', 'value'),
         State('time-range-slider', 'value')
-    ], prevent_initial_call=True
+    ], prevent_initial_call=True, background=True
 )
 def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date, active_platforms, question_choice,
                                  slider_values):
@@ -924,7 +934,7 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
     [
         State('radio-items', 'value'),
         State('time-range-slider', 'value'),
-    ], prevent_initial_call=True
+    ], prevent_initial_call=True, background=True
 )
 def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, active_platforms, question_choice,
                               slider_values,):
