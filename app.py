@@ -31,7 +31,8 @@ if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
     background_callback_manager = DiskcacheManager(cache)
 else:
     # For production...
-    from celery import celery
+    from celery import Celery
+    celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
     background_callback_manager = CeleryManager(celery_app)
 
 version = 'v1.5.1'  # Set range on time axis of profile. Set title.
