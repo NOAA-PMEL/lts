@@ -7,9 +7,6 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 import dash_design_kit as ddk
 
-## TEMPORARY (I hope) hack because the certificate on datalocal is not great
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
 
 # pytyony stuff
 import os
