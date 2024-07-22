@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 import dash_design_kit as ddk
+import colorcet as cc
 
 
 # pytyony stuff
@@ -46,7 +47,7 @@ d_format = "%Y-%m-%d"
 max_time_series_points = 88000
 max_profile_points = 60000  # At most plot max_profile_points point in a profile plot
 
-height_of_row = 345
+height_of_row = 450
 height_of_profile_row = 500
 profile_legend_gap = height_of_profile_row * .88
 legend_gap = height_of_row * .88
@@ -54,7 +55,7 @@ line_rgb = 'rgba(.04,.04,.04,.2)'
 plot_bg = 'rgba(1.0, 1.0, 1.0 ,1.0)'
 
 discover_error = '''
-You must configure a DISDOVERY_JSON env variable pointing to the JSON file that defines the which collections
+You must configure a DISCOVERY_JSON env variable pointing to the JSON file that defines the which collections
 of variables are to be in the discovery radio button list.
 '''
 
@@ -115,8 +116,6 @@ for dataset in platform_json['config']['datasets']:
         mdf['wmo_platform_code'] = platform
     mdf['did'] = did
     locations_by_did[did] = json.dumps(mdf.to_json())
-
-pp = pprint.PrettyPrinter(indent=4)
 
 ESRI_API_KEY = os.environ.get('ESRI_API_KEY')
 
@@ -752,132 +751,89 @@ def plot_timeseries_for_platform(selection_data, plot_start_date, plot_end_date,
                 current_search = discover_json['discovery'][a_search]
         col = dbc.Col(width=12)
         col.children = []
-        sub_plots = {}
-        sub_plot_titles = []
-        bottom_titles = []
-        legends = []
-        y_titles = []
-        row_h = []
-        p_idx = 0
-        for p_did in dids:
-            current_dataset = next(
-                (item for item in platform_json['config']['datasets'] if item['id'] == p_did), None)
-            p_url = current_dataset['url']
-            row = dbc.Row()
-            card = dbc.Card()
-            card.children = [dbc.CardHeader(current_dataset['title'] + ' at ' + selected_platform)]
-            row.children = [card]
-            col.children.append(row)
-            for search in current_search['search']:
-                for pd_data_url in search['datasets']:
-                    if p_did in pd_data_url:
-                        p_idx = p_idx + 1
-                        plot_title = 'Timeseries of ' + ','.join(search['short_names']) + ' at ' + selected_platform
-                        row_h.append(1 / len(dids))
-                        vlist = search['short_names'].copy()
-                        vlist.append('time')
-                        vlist.append('site_code')
-                        # TODO do we need to find the depth_name for every data set?
-                        vlist.append('depth')
-                        pvars = ','.join(vlist)
-                        sub_title = selected_platform
-                        bottom_title = current_dataset['title']
-                        p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
-                        p_url = p_url + '&depth<3.5'  # use only surface for time series
-                        days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
-                        factor = int((days_in_request * 24) / max_time_series_points)
-                        if factor > 0:
-                            sub_sample = '"depth,time/' +  str(factor) + 'day"' 
-                            p_url = p_url + '&orderByClosest(' + urllib.parse.quote(sub_sample, safe='&()=:/') + ')'
-                            fre = factor * 24
-                            sfre = str(fre) + 'H'
-                            if factor == 1:
-                                end = ' per day)'
-                            else:
-                                end = ' every ' + str(factor) + ' days)'
-                            sub_title = sub_title + ' (timeseries sub-sampled to one observation' + end
+        p_did = dids[0]
+        current_dataset = next(
+            (item for item in platform_json['config']['datasets'] if item['id'] == p_did), None)
+        p_url = current_dataset['url']
+        row = dbc.Row()
+        card = dbc.Card()
+        card.children = [dbc.CardHeader(current_dataset['title'] + ' at ' + selected_platform)]
+        row.children = [card]
+        col.children.append(row)
+        for search in current_search['search']:
+            for pd_data_url in search['datasets']:
+                if p_did in pd_data_url:
+                    plot_title = 'Timeseries of ' + ','.join(search['short_names']) + ' at ' + selected_platform
+                    vlist = search['short_names'].copy()
+                    vlist.append('time')
+                    vlist.append('site_code')
+                    # TODO do we need to find the depth_name for every data set?
+                    vlist.append('depth')
+                    pvars = ','.join(vlist)
+                    sub_title = selected_platform
+                    bottom_title = current_dataset['title']
+                    p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
+                    # p_url = p_url + '&depth<3.5'  # use only surface for time series
+                    p_var = search['short_names'][0]
+                    days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
+                    factor = int((days_in_request * 24) / max_time_series_points)
+                    print('days=', days_in_request,'maxpoints=', max_time_series_points, 'factor=',factor)
+                    if factor > 0:
+                        sub_sample = '"depth,time/' +  str(factor) + 'day"' 
+                        p_url = p_url + '&orderByClosest(' + urllib.parse.quote(sub_sample, safe='&()=:/') + ')'
+                        fre = factor * 24
+                        sfre = str(fre) + 'H'
+                        if factor == 1:
+                            end = ' per day)'
                         else:
-                            sfre = '1H'
-                        print('Making a timeseries plot of: ' + p_url)
-                        read_data = pd.read_csv(p_url, skiprows=[1])
-                        read_data = read_data.sort_values('time')
-                        read_data['site_code'] = read_data['site_code'].astype(str)
-                        read_data.loc[:, 'text_time'] = read_data['time'].astype(str)
-                        read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
-                        plot_data = make_gaps(read_data, sfre)
-                        traces = []
+                            end = ' every ' + str(factor) + ' days)'
+                        sub_title = sub_title + ' (timeseries sub-sampled to one observation' + end
+                    else:
+                        sfre = '1H'
+                    print('Making a timeseries plot of: ' + p_url)
+                    read_data = pd.read_csv(p_url, skiprows=[1])
+                    read_depths = read_data['depth'].unique()
 
-                        # if plot_data.shape[0] > sub_sample_limit:
-                        #     plot_data = plot_data.sample(n=sub_sample_limit).sort_values('time')
-                        #     sub_title = sub_title + ' (timeseries sub-sampled to ' + str(sub_sample_limit) + ' points) '
-                        sub_plot_titles.append(sub_title)
-                        bottom_titles.append(bottom_title)
-                        plot_units = ''
-                        leg_mem = []
-                        for vidx, p_var in enumerate(search['short_names']):
-                            leg_mem.append(p_var)
-                            if p_var in units_by_did[p_did]:
-                                plot_units = '(' + units_by_did[p_did][p_var] + ')'
-                            y_titles.append(p_var + ' ' + plot_units)
-                            plot_line_color = px.colors.qualitative.Plotly[vidx]
-                            plot_data['text'] = p_var + '<br>' + plot_data['text_time'] + '<br>' + plot_data[
-                                p_var].apply(lambda x: '{0:.2f}'.format(x))
-                            trace = go.Scattergl(x=plot_data['time'], y=plot_data[p_var],
-                                                 connectgaps=False,
-                                                 name=p_var,
-                                                 mode='lines',
-                                                 hovertext=plot_data['text'],
-                                                 marker={'color': plot_line_color, },
-                                                 hoverinfo="text",
-                                                 hoverlabel=dict(namelength=-1),
-                                                 legendgroup=p_idx,
-                                                 )
-                            traces.append(trace)
-                        legends.append(leg_mem)
-                        sub_plots[p_did] = traces
-        figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
-                               shared_yaxes=False,
-                               row_heights=row_h)
-        graph_height = height_of_row * len(sub_plot_titles)
-        for pidx, plt_did in enumerate(sub_plots):
-            p_traces = sub_plots[plt_did]
-            for p_trace in p_traces:
-                figure.add_trace(p_trace, row=pidx + 1, col=1)
-                figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
-        figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ))
-        figure.update_layout(plot_bgcolor=plot_bg, hovermode='x unified', legend_tracegroupgap=legend_gap, paper_bgcolor="white")
+                    read_data = read_data[read_data[p_var].notna()]
+                    read_data = read_data[read_data['time'].notna()]
+                    read_data['site_code'] = read_data['site_code'].astype(str)
+                    read_data.loc[:, 'text_time'] = read_data['time'].astype(str)
+                    read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
+
+                    figure = go.Figure()
+                    plot_units = ''
+                    if p_var in units_by_did[p_did]:
+                        plot_units = '(' + units_by_did[p_did][p_var] + ')'
+                    y_title = p_var + ' ' + plot_units
+                    for idx, gap_depth in enumerate(sorted(read_depths)):
+                        data_at_depth = read_data.loc[read_data['depth']==gap_depth]
+                        data_at_depth = data_at_depth.sort_values('time')
+                        data_nan_gaps = make_gaps(data_at_depth, sfre)
+                        trace = px.line(data_nan_gaps, x='time', y=p_var, hover_data=['time', p_var, 'depth'])
+                        trace.update_traces(showlegend=True, name=str(gap_depth),line=dict(color=cc.b_glasbey_bw_minc_20[idx]))
+                        figure.add_trace(list(trace.select_traces())[0])
+
+        figure.update_yaxes(title=y_title)
+        figure.update_traces(showlegend=True, connectgaps=False)
+        figure['layout'].update(height=height_of_row, margin=dict(l=80, r=80, b=80, t=80, ))
+        figure.update_layout(plot_bgcolor=plot_bg, paper_bgcolor="white",
+                             title = {'text': sub_title, 'x':.01, 'font_size': 22, 'xanchor': 'left', 'xref': 'paper'},
+                             legend=dict(orientation="v", yanchor="top", y=1.01, xanchor="right", x=1.08, bgcolor='white', font_size=16))
         figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
-        for bidx, bt in enumerate(bottom_titles):
-            figure.add_annotation(
-                xref='x domain',
-                yref='y domain',
-                xanchor='right',
-                yanchor='bottom',
-                x=1.0,
-                y=-.45,
-                font_size=22,
-                text=bt,
-                showarrow=False,
-                row=(bidx+1), 
-                col=1,
-                bgcolor='rgba(255,255,255,.85)',
-            )
-            plot_legends = legends[bidx]
-            for pli, leg_entry in enumerate(plot_legends):
-                figure.add_annotation(
-                    xref='x domain',
-                    yref='y domain',
-                    xanchor='left',
-                    x=0.01,
-                    y=.95-(pli/10),
-                    font_size=16,
-                    font_color=px.colors.qualitative.Plotly[pli],
-                    text=u'<b>\u23AF\u23AF\u23AF\u23AF</b>  '+leg_entry,
-                    showarrow=False,
-                    row=(bidx+1), 
-                    col=1,
-                    bgcolor='rgba(255,255,255,.85)',
-                )
+
+        figure.add_annotation(
+            xref='x domain',
+            yref='y domain',
+            xanchor='right',
+            yanchor='bottom',
+            x=1.0,
+            y=-.20,
+            font_size=22,
+            text=bottom_title,
+            showarrow=False,
+            bgcolor='rgba(255,255,255,.85)',
+        )
+
         figure.update_xaxes({
             'ticklabelmode': 'period',
             'showticklabels': True,
@@ -965,12 +921,8 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                 current_search = discover_json['discovery'][a_search]
         col = dbc.Col(width=12)
         col.children = []
-        sub_plots = {}
-        sub_plot_titles = []
-        bottom_titles = []
-        y_titles = []
         row_h = []
-        p_idx = 0
+
         for p_did in dids:
             current_dataset = next(
                 (item for item in platform_json['config']['datasets'] if item['id'] == p_did), None)
@@ -987,7 +939,6 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                 for pd_data_url in search['datasets']:
                     if p_did in pd_data_url:
                         list_group.children.append(link_group)
-                        p_idx = p_idx + 1
                         plot_title = 'Profile of ' + ','.join(search['short_names']) + ' at ' + selected_platform
                         row_h.append(1 / len(dids))
                         vlist = search['short_names'].copy()
@@ -1023,19 +974,16 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                         read_data['site_code'] = read_data['site_code'].astype(str)
                         read_data.loc[:, 'text_time'] = read_data['time'].astype(str)
                         read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
-                        traces = []
-                        sub_plot_titles.append(sub_title)
-                        bottom_titles.append(bottom_title)
                         plot_units = ''
                         for vidx, p_var in enumerate(search['short_names']):
                             read_data = read_data[read_data[p_var].notna()]
                             read_data = read_data[read_data['time'].notna()]
                             if d_name in units_by_did[p_did]:
                                 plot_units = '(' + units_by_did[p_did][d_name] + ')'
-                            y_titles.append(d_name + ' ' + plot_units)
                             read_data['text'] = p_var + '<br>' + read_data['text_time'] + '<br>' + \
                                                 d_name + '=' + read_data[d_name].astype(str) + '<br>' + \
                                                 p_var + '=' + read_data[p_var].apply(lambda x: '{0:.2f}'.format(x))
+                            y_title = d_name + ' ' + plot_units
                             trace = go.Scattergl(x=read_data['time'], y=read_data[d_name],
                                                  connectgaps=False,
                                                  name=p_var,
@@ -1055,43 +1003,28 @@ def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, ac
                                                  ),
                                                  hoverinfo="text",
                                                  hoverlabel=dict(namelength=-1),
-                                                 legendgroup=p_idx,
                                                  )
 
-                            traces.append(trace)
-                        sub_plots[p_did] = traces
-        figure = make_subplots(rows=len(sub_plot_titles), cols=1, shared_xaxes='all', subplot_titles=sub_plot_titles,
-                               shared_yaxes=False,
-                               row_heights=row_h)
-        graph_height = height_of_profile_row * len(sub_plot_titles)
+                            
+        figure = go.Figure()
+        figure.add_trace(trace)
+        graph_height = height_of_profile_row 
         figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
-
-        for pidx, plt_did in enumerate(sub_plots):
-            p_traces = sub_plots[plt_did]
-            for p_trace in p_traces:
-                figure.add_trace(p_trace, row=pidx + 1, col=1)
-                figure.update_yaxes(title=y_titles[pidx], row=pidx + 1, col=1)
-                figure.add_annotation()
-            bt = bottom_titles[pidx]
-            figure.add_annotation(
-                xref='x domain',
-                yref='y domain',
-                xanchor='right',
-                yanchor='bottom',
-                x=1.0,
-                y=-.25,
-                font_size=22,
-                text=bt,
-                showarrow=False,
-                row=(pidx+1), 
-                col=1,
-                bgcolor='rgba(255,255,255,.85)',
-            )
+        figure.update_yaxes(title=y_title)
+        figure.add_annotation(
+            xref='x domain',
+            yref='y domain',
+            xanchor='right',
+            yanchor='bottom',
+            x=1.0,
+            y=-.25,
+            font_size=22,
+            text=bottom_title,
+            showarrow=False,
+            bgcolor='rgba(255,255,255,.85)',
+        )
         figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ), paper_bgcolor="white", plot_bgcolor='white')
-        figure.update_coloraxes({
-
-        })
-        figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap)
+        figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap,  title = {'text': sub_title, 'x':.01, 'font_size': 22, 'xanchor': 'left', 'xref': 'paper'},)
         figure.update_xaxes({
             'range':[read_data['time'].min(), read_data['time'].max()],
             # 'autorange': True,

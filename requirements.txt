@@ -6,4 +6,5 @@ dash_bootstrap_components
 packaging==20.4
 Flask==2.1.3
 Werkzeug==2.2.2
+colorcet
 git+https://github.com/noaaroland/sdig.git
