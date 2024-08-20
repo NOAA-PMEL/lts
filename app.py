@@ -1,7 +1,6 @@
 # Dash
-import dash
-from dash import Dash, callback, html, dcc, dash_table, Input, Output, State, MATCH, ALL, CeleryManager, DiskcacheManager, exceptions, no_update
-import dash_bootstrap_components as dbc
+from dash_enterprise_libraries import EnterpriseDash
+from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, exceptions, no_update, exceptions, callback_context
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
@@ -25,6 +24,8 @@ import urllib
 
 # My stuff
 from sdig.erddap.info import Info
+
+import theme
 
 if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
     # For testing...
@@ -80,6 +81,10 @@ radio_value = 'temperature'
 temperature_sites = pd.DataFrame.from_dict(config['temperature']['sites'], orient='index').reset_index().rename(columns={'index': 'site_code'})
 salinity_sites = pd.DataFrame.from_dict(config['salinity']['sites'], orient='index').reset_index().rename(columns={'index': 'site_code'})
 
+site_options = []
+for site in temperature_sites['site_code'].sort_values().values:
+    site_options.append({'label': site, 'value': site})
+
 all_start = temperature_sites['start_time'].min()
 all_end = temperature_sites['end_time'].max()
 
@@ -88,193 +93,111 @@ all_end_seconds = dateutil.parser.isoparse(all_end).timestamp()
 
 time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
-app = dash.Dash(__name__,
-                external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP],
-                background_callback_manager=background_callback_manager
+app = EnterpriseDash(__name__, 
+                background_callback_manager=background_callback_manager,
                 )
 
 app._favicon = 'favicon.ico'
-app.title = 'LTS'
 server = app.server
 
-app.layout = \
-    html.Div(
-        style={'padding-left': '15px', 'padding-right': '25px'},
-        children=[
-            dcc.Location(id='location', refresh=False),
-            dcc.Store(id='active-platforms'),
-            dcc.Store(id='inactive-platforms'),
-            dcc.Store(id='selected-platform'),
-            dcc.Store(id='xrange'),
-            dcc.Store(id='factor'),
-            html.Div(id='data-div', style={'display': 'none'}),
-            dbc.Navbar(
-                [
-                    # Use row and col to control vertical alignment of logo / brand
-                    dbc.Row(
-                        style={'width': '100%'},
-                        align="center",
-                        children=[
-                            dbc.Col(width=2, children=[
-                                html.Img(src='assets/os_logo.gif',
-                                         style={'height': '97px', 'width': '150px'})
-                            ]),
-                            dbc.Col(width=3, style={'display': 'flex', 'align-items': 'left'}, children=[
-                                html.A(
-                                    dbc.NavbarBrand(
-                                        'Long time series ', className="ml-2",
-                                        style={
-                                            'padding-top': '160px',
-                                            'font-size': '2.5em',
-                                            'font-weight': 'bold'
-                                        }
-                                    ),
-                                    href='https://www.pmel.noaa.gov/gtmba/oceansites',
-                                    style={'text-decoration': 'none'}
-                                )]
-                                    ),
-                              dbc.Col(width=4), # empty space, replace with message if needed
-                            # dbc.Col(width=4, children=[
-                            #     html.Div(children=[
-                            #     html.Div('Parts of the US government are closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. See ', style={'display':'inline'}), 
-                            #     html.A('www.weather.gov', href='https://www.weather.gov', style={'display':'inline'}), 
-                            #     html.Div(' for critical weather information. To learn more, see ', style={'display': 'inline'}), 
-                            #     html.A('www.commerce.gov', href='https://www.commerce.gov', style={'display':'inline'}), 
-                            #     html.Div('.', style={'display':'inline'}),
-                            #     ], style={'display':'inline'})
-                            # ]),
-                            dbc.Col(width=3, children=[
-                                dcc.Loading(id='nav-loader', children=[
-                                    html.Div(id='loading-div'),
-                                    html.Div(children=[
-                                        dbc.Button("Download Data", id='download-button', className="me-1"),
-                                        dbc.Modal(children=
-                                        [
-                                            dbc.ModalHeader(dbc.ModalTitle("Download Data")),
-                                            dbc.ModalBody(id='download-body'),
-                                            dbc.ModalFooter(
-                                                dbc.Button(
-                                                    "Close", id="close-download", className="ms-auto", n_clicks=0
-                                                )
-                                            ),
-                                        ],
-                                            id="download-dialog",
-                                            is_open=False,
-                                        )
-                                    ]),
-                                ])
-                            ])
-                        ]
-                    )
-                ]
-            ),
-            dbc.Row(children=[
-                dbc.Col(width=3, children=[
-                    dbc.Card(children=[
-                        dbc.CardHeader(children=["Discover:"]),
-                        dbc.CardBody(children=[
-                            dbc.RadioItems(
-                                options=radio_options,
-                                value=radio_value,
-                                id="radio-items",
-                            ),
-                        ])
-                    ]),
-                    dbc.Card(children=[
-                        dbc.CardHeader(children=['In the selected time range:']),
-                        dbc.Row(children=[
-                            dbc.Col(width=6, children=[
-                                dbc.Card(children=[
-                                    dbc.CardHeader(children=['Start Date']),
-                                ]),
-                                dbc.Input(id='start-date', debounce=True, value=all_start)
-                            ]),
-                            dbc.Col(width=6, children=[
-                                dbc.Card(children=[
-                                    dbc.CardHeader(children=['End Date']),
-                                ]),
-                                dbc.Input(id='end-date', debounce=True, value=all_end)
-                            ])
-                        ]),
-                        dbc.Row(children=[
-                            dbc.Col(width=12, children=[
-                                html.Div(style={'padding-right': '40px', 'padding-left': '40px',
-                                                'padding-top': '20px', 'padding-bottom': '45px'}, children=[
-                                    dcc.RangeSlider(id='time-range-slider',
-                                                    value=[all_start_seconds, all_end_seconds],
-                                                    min=all_start_seconds,
-                                                    max=all_end_seconds,
-                                                    step=month_step,
-                                                    marks=time_marks,
-                                                    updatemode='mouseup',
-                                                    allowCross=False)
-                                ])
-                            ])
-                        ]),
-                    ]),
-                ]),
-                dbc.Col(width=9, children=[
-                    dbc.Card(children=[
-                        dbc.CardHeader([
-                            'Select the type of data and date range. Black dots have data, gray dots do not.',
-                            dcc.Loading(html.Div(id='map-loading'))
-                        ]),
-                        dbc.CardBody(
-                            ddk.Graph(id='location-map', config=graph_config),
-                        )
-                    ])
-                ])
-            ]),
-            dbc.Row(id='plot-row', style={'display': 'none'}, children=[
-                dbc.Card(id='plot-card', children=[
-                    dbc.CardHeader(id='plot-card-title', children=[
-                        dbc.Button(id='resample', children='Reample', className="me-1", disabled=True)
-                    ]),
-                    dbc.CardBody(id='plot-card-body', children=[
-                        dcc.Loading(
-                            ddk.Graph(id='plot-graph', config=graph_config)
-                        )
-                    ])
-                ]),
-            ]),
-            dbc.Row(style={'margin-bottom': '10px'}, children=[
-                dbc.Col(width=12, children=[
-                    dbc.Card(children=[
-                        dbc.Row(children=[
-                            dbc.Col(width=1, children=[
-                                html.Img(src='https://www.pmel.noaa.gov/sites/default/files/PMEL-meatball-logo-sm.png',
-                                         height=100,
-                                         width=100),
-                            ]),
-                            dbc.Col(width=10, children=[
-                                html.Div(children=[
-                                    dcc.Link('National Oceanic and Atmospheric Administration',
-                                             href='https://www.noaa.gov/'),
-                                ]),
-                                html.Div(children=[
-                                    dcc.Link('Pacific Marine Environmental Laboratory',
-                                             href='https://www.pmel.noaa.gov/'),
-                                ]),
-                                html.Div(children=[
-                                    dcc.Link('oar.pmel.webmaster@noaa.gov', href='mailto:oar.pmel.webmaster@noaa.gov')
-                                ]),
-                                html.Div(children=[
-                                    dcc.Link('DOC |', href='https://www.commerce.gov/'),
-                                    dcc.Link(' NOAA |', href='https://www.noaa.gov/'),
-                                    dcc.Link(' OAR |', href='https://www.research.noaa.gov/'),
-                                    dcc.Link(' PMEL |', href='https://www.pmel.noaa.gov/'),
-                                    dcc.Link(' Privacy Policy |', href='https://www.noaa.gov/disclaimer'),
-                                    dcc.Link(' Disclaimer |', href='https://www.noaa.gov/disclaimer'),
-                                    dcc.Link(' Accessibility |', href='https://www.pmel.noaa.gov/accessibility'),
-                                    dcc.Link(version, href='https://github.com/NOAA-PMEL/lts')
-                                ])
-                            ]),
-                        ])
-                    ])
-                ])
+app.setup_shortcuts(
+    logo=app.get_asset_url("os_logo.gif"),
+    title="OceanSITES Long Timeseries", # Default: app.title
+    size="normal" # Can also be "slim"
+)
+
+app.layout = ddk.App(theme=theme.theme, children=[
+    dcc.Store(id='active-platforms'),
+    dcc.Store(id='inactive-platforms'),
+    dcc.Store(id='xrange'),
+    dcc.Store(id='factor'),
+    html.Div(id='data-div', style={'display': 'none'}),
+    ddk.Card(width=.3, children=[
+        ddk.Card(width=1, children=[
+            dcc.Loading(html.Div(id='loading-div', style={'display':'none'})),
+            ddk.Modal(hide_target=True, target_id='download-card', width='40%', children=[
+                html.Button('Download Data', id='download-button',)
             ])
-        ]
-    )
+        ]),
+        ddk.Card(width=1, children=[
+            dcc.RadioItems(id='radio-items',
+                options=radio_options,
+                value=radio_value
+            ),
+        ]),
+        ddk.Card(width=1, children=[
+            ddk.Block(width=.5, children=[
+                dcc.Input(id='start-date', debounce=True, value=all_start),
+            ]),
+            ddk.Block(width=.5, children=[
+                dcc.Input(id='end-date', debounce=True, value=all_end),
+            ]),
+            html.Div(style={'padding-right': '40px', 'padding-left': '40px', 'padding-top': '20px', 'padding-bottom': '45px'}, children=[
+                    dcc.RangeSlider(id='time-range-slider',
+                                    value=[all_start_seconds, all_end_seconds],
+                                    min=all_start_seconds,
+                                    max=all_end_seconds,
+                                    step=month_step,
+                                    marks=time_marks,
+                                    updatemode='mouseup',
+                                    allowCross=False)
+            ])
+        ]),
+        ddk.Card(width=1, children=[
+            dcc.Dropdown(id='sites', options=site_options, multi=False, clearable=True)
+        ])
+    ]),
+    ddk.Card(width=.7, children=[
+        ddk.CardHeader(title='Choose a time range and location. When setting the time range, black locations have data.', children=[
+            dcc.Loading(html.Div(id='map-loading',style={'padding-right': '40px'}))
+        ]),
+        ddk.Graph(id='location-map', config=graph_config),
+    ]),
+    ddk.Card(id='plot-row', width=1, style={'display': 'none'}, children=[
+        ddk.CardHeader(children=[
+            html.Button(id='resample', children='Reample', disabled=True)
+        ]),    
+        ddk.Graph(id='plot-graph', config=graph_config)
+    ]),
+    ddk.Card(style={'margin-bottom': '10px'}, children=[
+        ddk.Block(children=[
+            ddk.Block(width=.08, children=[
+                html.Img(src='https://www.pmel.noaa.gov/sites/default/files/PMEL-meatball-logo-sm.png',
+                            height=100,
+                            width=100),
+            ]),
+            ddk.Block(width=.83, children=[
+                html.Div(children=[
+                    dcc.Link('National Oceanic and Atmospheric Administration',
+                                href='https://www.noaa.gov/'),
+                ]),
+                html.Div(children=[
+                    dcc.Link('Pacific Marine Environmental Laboratory', href='https://www.pmel.noaa.gov/'),
+                ]),
+                html.Div(children=[
+                    dcc.Link('oar.pmel.webmaster@noaa.gov', href='mailto:oar.pmel.webmaster@noaa.gov')
+                ]),
+                html.Div(children=[
+                    dcc.Link('DOC |', href='https://www.commerce.gov/', target='_blank'),
+                    dcc.Link(' NOAA |', href='https://www.noaa.gov/', target='_blank'),
+                    dcc.Link(' OAR |', href='https://www.research.noaa.gov/', target='_blank'),
+                    dcc.Link(' PMEL |', href='https://www.pmel.noaa.gov/', target='_blank'),
+                    dcc.Link(' Privacy Policy |', href='https://www.noaa.gov/disclaimer', target='_blank'),
+                    dcc.Link(' Disclaimer |', href='https://www.noaa.gov/disclaimer', target='_blank'),
+                    dcc.Link(' Accessibility |', href='https://www.pmel.noaa.gov/accessibility', target='_blank'),
+                    dcc.Link( version, href='https://github.com/NOAA-PMEL/lts', target='_blank')
+                ])
+            ]),
+        ]),
+    ]),
+    ddk.Card(id='download-card', children=[
+        ddk.CardHeader('Download the data a full resolution.'),
+        dcc.Link('HTML  |', href='', id='download-html', target='_blank'),
+        dcc.Link('netCDF  |', href='', id='download-netcdf', target='_blank'), 
+        dcc.Link('csv ', href='', id='download-csv', target='_blank'),
+        ddk.CardFooter(dcc.Link('View ERDDAP Data Page', id='download-metadata', href=''))
+    ])
+])
 
 
 def get_blank(platform, b_start_date, b_end_date):
@@ -327,36 +250,25 @@ def make_gaps(pdf, fre):
     return pdf
 
 
-
-@app.callback(
-    Output("download-dialog", "is_open"),
-    [Input("download-button", "n_clicks"), Input("close-download", "n_clicks")],
-    [State("download-dialog", "is_open")],
-)
-def toggle_modal(n1, n2, is_open):
-    if n1 or n2:
-        return not is_open
-    return is_open
-
-
 @app.callback(
     [
         Output('active-platforms', 'data'),
         Output('inactive-platforms', 'data'),
-        Output('map-loading', 'children')
+        Output('map-loading', 'children'),
     ],
     [
         Input('start-date', 'value'),
         Input('end-date', 'value'),
         Input('radio-items', 'value'),
-    ]
+    ], prevent_initial_call='initial_duplicate'
 )
-def update_platform_state(in_start_date, in_end_date, in_data_question):
+def update_platform_state(in_start_date, in_end_date, in_data_question,):
     join_type = 'or' # There is only one short name for these data sets
     time_constraint = ''
     all_with_data = None
     all_without_data = None
     vars_to_get = []
+    radio_options = no_update
     # check to see which platforms have data for the current variables
     if in_start_date is not None and in_end_date is not None:
         n_start_obj = dateutil.parser.isoparse(in_start_date)
@@ -464,17 +376,38 @@ def update_platform_state(in_start_date, in_end_date, in_data_question):
 
 @app.callback(
     [
+        Output('sites', 'options', allow_duplicate=True)
+    ],
+    [
+        Input('radio-items', 'value')
+    ], prevent_initial_call=True
+)
+def change_data_parameter(in_radio):
+    if in_radio == 'temperature':
+        locations = temperature_sites
+    else:
+        locations = salinity_sites
+
+    site_opts = []
+    for site in locations['site_code'].sort_values().values:
+        site_opts.append({'label': site, 'value': site})
+    return [site_opts]
+
+
+@app.callback(
+    [
         Output('location-map', 'figure'),
     ],
     [
         Input('active-platforms', 'data'),
         Input('inactive-platforms', 'data'),
-        Input('selected-platform', 'data'),
+        Input('sites', 'value'),
     ],
     [
-        State('location-map', 'relayoutData')
+        State('location-map', 'relayoutData'),
+        State('radio-items', 'value')
     ], prevent_initial_call=True)
-def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_platform, in_map):
+def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_platform, in_map, in_question):
 
     center = {'lon': 0.0, 'lat': 0.0}
     zoom = 1.4
@@ -485,11 +418,18 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
 
     location_map = go.Figure()
     selected_plat = None
-    if in_selected_platform is not None:
-        selected_plat = json.loads(in_selected_platform)
+
+    if in_question == 'temperature':
+        locations = temperature_sites
+    else:
+        locations = salinity_sites
+
     if in_active_platforms is not None and in_inactive_platforms is not None:
         data_for_yes = pd.read_json(json.loads(in_active_platforms))
         data_for_no = pd.read_json(json.loads(in_inactive_platforms))
+        if in_selected_platform is not None:
+            selected_plat = locations.loc[locations['site_code'] == in_selected_platform]
+        
         no_trace = None
         if data_for_no.shape[0] > 0:
             no_trace = go.Scattermapbox(lat=data_for_no['latitude'],
@@ -513,12 +453,13 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
         if yes_trace is not None:
             location_map.add_trace(yes_trace)
 
-    if selected_plat is not None and 'lat' in selected_plat and 'lon' in selected_plat and 'site_code' in selected_plat:
-        yellow_trace = go.Scattermapbox(lat=[selected_plat['lat']],
-                                        lon=[selected_plat['lon']],
-                                        hovertext=[selected_plat['site_code']],
+    if selected_plat is not None:
+        
+        yellow_trace = go.Scattermapbox(lat=selected_plat['latitude'].values,
+                                        lon=selected_plat['longitude'].values,
+                                        hovertext=selected_plat['site_code'].values,
                                         hoverinfo='lat+lon+text',
-                                        customdata=[selected_plat['site_code']],
+                                        customdata=selected_plat['site_code'].values,
                                         marker={'color': 'yellow', 'size': 15},
                                         mode='markers')
         location_map.add_trace(yellow_trace)
@@ -550,9 +491,8 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
 
 @app.callback(
     [
-        Output('selected-platform', 'data'),
-        Output('start-date', 'value', allow_duplicate=True),
-        Output('end-date', 'value', allow_duplicate=True),
+        Output('sites', 'value', allow_duplicate=True),
+        Output('time-range-slider', 'value', allow_duplicate=True),
     ],
     [
         Input('location-map', 'clickData'),
@@ -570,7 +510,7 @@ def update_selected_platform(click, state_parameter):
     else:
         raise exceptions.PreventUpdate
 
-    selection = None
+    selected_platform = None
     start_date = all_start
     end_date = all_end
     if click is not None:
@@ -582,22 +522,27 @@ def update_selected_platform(click, state_parameter):
             end_date = site['end_time'].values[0]
             selected_lat = point_dict['lat']
             selected_lon = point_dict['lon']
-            print('new platform selected', selected_platform)
+            
             selection = json.dumps({'site_code': selected_platform, 'lat': selected_lat, 'lon': selected_lon})
-    return [selection, start_date, end_date]
+    starto = dateutil.parser.isoparse(start_date)
+    endo = dateutil.parser.isoparse(end_date)
+    return [selected_platform, [starto.timestamp(), endo.timestamp()]]
 
 
 @app.callback(
     [
         Output('plot-row', 'style'),
         Output('plot-graph', 'figure'),
-        Output('download-body', 'children'),
+        Output('download-metadata', 'href'),
+        Output('download-html', 'href'),
+        Output('download-netcdf', 'href'),
+        Output('download-csv', 'href'),
         Output('resample', 'disabled', allow_duplicate=True),
         Output('factor', 'data'),
         Output('loading-div', 'children')
     ],
     [
-        Input('selected-platform', 'data'),
+        Input('sites', 'value'),
         Input('start-date', 'value'),
         Input('end-date', 'value'),
         Input('active-platforms', 'data'),
@@ -607,37 +552,29 @@ def update_selected_platform(click, state_parameter):
         State('time-range-slider', 'value'),
     ], prevent_initial_call=True, background=True
 )
-def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms, question_choice, slider_values):
+def make_plots(selected_platform, plot_start_date, plot_end_date, active_platforms, question_choice, slider_values):
     figure = {}
-    list_group = html.Div()
-    list_group.children = []
-    link_group = dbc.ListGroup(horizontal=True)
-    link_group.children = []
-    list_group.children.append(link_group)
     query = ''
     row_style = {'display': 'block'}
     plot_title = 'No data found.'
     active = None
     factor = -1
-    selected_platform = None
-    if selection_data is not None:
-        selected_json = json.loads(selection_data)
-        if 'site_code' in selected_json:
-            selected_platform = selected_json['site_code']
-        else:
-            raise dash.exceptions.PreventUpdate
-    else:
-        raise dash.exceptions.PreventUpdate
+    meta_link = ''
+    html_link = ''
+    nc_link = ''
+    csv_link = ''
+    if selected_platform is None:
+        return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update]
     if active_platforms is not None:
         active = pd.read_json(json.loads(active_platforms))
     if active is not None and selected_platform is not None and question_choice is not None:
         plot_time = '&time>=' + plot_start_date + '&time<=' + plot_end_date
         to_plot = active.loc[active['site_code'] == selected_platform]
         if to_plot.empty:
-            return [row_style, get_blank(selected_platform, plot_start_date, plot_end_date), '', '', True, factor, '']
+            return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update]
         
         p_url = to_plot['url'].values[0]
-        meta_url = p_url
+        meta_link = p_url
         # plot_title = 'Timeseries of ' + ','.join(config[question_choice]['short_names']) + ' at ' + selected_platform
         vlist = config[question_choice]['short_names'].copy()
         d_name = to_plot['depth_name'].values[0]
@@ -654,18 +591,13 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
         p_var = config[question_choice]['short_names'][0]
         days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
         factor = int((days_in_request * 24) / max_time_series_points)
-        print('days=', days_in_request,'maxpoints=', max_time_series_points, 'factor=',factor)
+        # print('days=', days_in_request,'maxpoints=', max_time_series_points, 'factor=',factor)
         
-        meta_item = dbc.ListGroupItem(to_plot['title'].values[0] + ' at ' + selected_platform,
-                                      href=meta_url, target='_blank')
-        link_group.children.append(meta_item)
+
         # make the data URL's at the full resoltion without subsampling
-        item = dbc.ListGroupItem('.html', href=p_url.replace('.csv', '.htmlTable'), target='_blank')
-        link_group.children.append(item)
-        item = dbc.ListGroupItem('.csv', href=p_url.replace('.htmlTable', '.csv'), target='_blank')
-        link_group.children.append(item)
-        item = dbc.ListGroupItem('.nc', href=p_url.replace('.csv', '.ncCF'), target='_blank')
-        link_group.children.append(item)
+        html_link = p_url.replace('.csv', '.htmlTable')
+        csv_link = p_url
+        nc_link = p_url.replace('.csv', '.ncCF')
         if factor > 0:
             sub_sample = '"depth,time/' +  str(factor) + 'day"' 
             p_url = p_url + '&orderByClosest(' + urllib.parse.quote(sub_sample, safe='&()=:/') + ')'
@@ -678,7 +610,7 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
             sub_title = sub_title + ' (sub-sampled to one observation' + end
         else:
             sfre = '1H'
-        print('Making a timeseries plot of: ' + p_url)
+        print('Making plots of: ' + p_url)
         read_data = pd.read_csv(p_url, skiprows=[1])
         read_depths = read_data['depth'].unique()
 
@@ -701,7 +633,7 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
 
         figure.update_yaxes(title=y_title)
         figure.update_traces(showlegend=True, connectgaps=False,)
-        figure['layout'].update(height=height_of_row, margin=dict(l=80, r=80, b=80, t=80, ))
+        figure['layout'].update(height=height_of_row, margin=dict(l=80, r=80, b=120, t=80, ))
         figure.update_layout(plot_bgcolor=plot_bg, paper_bgcolor="white",
                              title = {'text': sub_title, 'x':.01, 'font_size': 22, 'xanchor': 'left', 'xref': 'paper'},
                              legend=dict(title='Depth', orientation="v", yanchor="top", y=1.1, xanchor="right", x=1.08, bgcolor='white', font_size=16))
@@ -790,13 +722,14 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
             yref='y domain',
             xanchor='right',
             yanchor='bottom',
-            x=1.05,
-            y=-.2,
+            x=1.0,
+            y=-.3,
             font_size=22,
             text=bottom_title,
             showarrow=False,
             bgcolor='rgba(255,255,255,.85)', row=2, col=1
         )
+        
         figure.update_yaxes({
             'autorange': 'reversed',
             'gridcolor': line_rgb,
@@ -811,206 +744,12 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
         }, row=2, col=1)
         figure.add_trace(trace, 2, 1)
 
-    return [row_style, figure, list_group, True, factor, '']
-
-
-# @app.callback(
-#     [
-#         Output('profile-card-title', 'children'),
-#         Output('profile-graph', 'figure'),
-#         Output('download-body', 'children'),
-#         Output('loading-div', 'children')
-#     ],
-#     [
-#         Input('selected-platform', 'data'),
-#         Input('start-date', 'value'),
-#         Input('end-date', 'value'),
-#         Input('active-platforms', 'data'),
-#     ],
-#     [
-#         State('radio-items', 'value'),
-#         State('time-range-slider', 'value'),
-#     ], prevent_initial_call=True, background=True
-# )
-# def plot_profile_for_platform(selection_data, plot_start_date, plot_end_date, active_platforms, question_choice,
-#                               slider_values,):
-#     raise exceptions.PreventUpdate
-    # figure = {}
-    # query = ''
-    # row_style = {'display': 'block'}
-    # plot_title = 'No data found.'
-    # active = None
-    # list_group = html.Div()
-    # list_group.children = []
-    # if selection_data is not None:
-    #     selected_json = json.loads(selection_data)
-    #     if 'site_code' in selected_json:
-    #         selected_platform = selected_json['site_code']
-    #     else:
-    #         raise dash.exceptions.PreventUpdate
-    # else:
-    #     raise dash.exceptions.PreventUpdate
-    # if active_platforms is not None:
-    #     active = pd.read_json(json.loads(active_platforms))
-    # if active is not None and selected_platform is not None:
-    #     plot_time = '&time>=' + plot_start_date + '&time<=' + plot_end_date
-    #     to_plot = active.loc[active['site_code'] == selected_platform]
-    #     if to_plot.empty:
-    #         return [plot_title, get_blank(selected_platform, plot_start_date, plot_end_date), list_group, '']
-    #     dids = to_plot['did'].to_list()
-    #     current_search = None
-    #     for a_search in discover_json['discovery']:
-    #         if a_search == question_choice:
-    #             current_search = discover_json['discovery'][a_search]
-    #     col = dbc.Col(width=12)
-    #     col.children = []
-    #     row_h = []
-
-    #     for p_did in dids:
-    #         current_dataset = next(
-    #             (item for item in platform_json['config']['datasets'] if item['id'] == p_did), None)
-    #         p_url = current_dataset['url']
-    #         d_name = current_dataset['vertical_axis_name']
-    #         row = dbc.Row()
-    #         card = dbc.Card()
-    #         card.children = [dbc.CardHeader(current_dataset['title'] + ' at ' + selected_platform)]
-    #         row.children = [card]
-    #         col.children.append(row)
-    #         for search in current_search['search']:
-    #             link_group = dbc.ListGroup(horizontal=True)
-    #             link_group.children = []
-    #             for pd_data_url in search['datasets']:
-    #                 if p_did in pd_data_url:
-    #                     list_group.children.append(link_group)
-    #                     plot_title = 'Profile of ' + ','.join(search['short_names']) + ' at ' + selected_platform
-    #                     row_h.append(1 / len(dids))
-    #                     vlist = search['short_names'].copy()
-    #                     vlist.append('time')
-    #                     vlist.append('site_code')
-    #                     # TODO do we need to find the depth_name for every data set?
-    #                     vlist.append(d_name)
-    #                     pvars = ','.join(vlist)
-    #                     meta_item = dbc.ListGroupItem(current_dataset['title'] + ' at ' + selected_platform,
-    #                                                   href=p_url, target='_blank')
-    #                     link_group.children.append(meta_item)
-    #                     sub_title = selected_platform
-    #                     bottom_title = current_dataset['title']
-    #                     p_url = p_url + '.csv?' + pvars + plot_time + '&site_code="' + selected_platform + '"'
-    #                     # make the data URL's at the full resoltion without subsampling
-    #                     item = dbc.ListGroupItem('.html', href=p_url.replace('.csv', '.htmlTable'), target='_blank')
-    #                     link_group.children.append(item)
-    #                     item = dbc.ListGroupItem('.csv', href=p_url.replace('.htmlTable', '.csv'), target='_blank')
-    #                     link_group.children.append(item)
-    #                     item = dbc.ListGroupItem('.nc', href=p_url.replace('.csv', '.ncCF'), target='_blank')
-    #                     link_group.children.append(item)
-    #                     days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
-    #                     has_data = active.loc[active['site_code'] == selected_platform]['has_data'].values[0]
-    #                     factor = int(has_data/max_profile_points)
-    #                     if factor > 1:
-    #                         p_url = p_url + '&orderByClosest("' + d_name + ',time/' + str(factor) + 'hour")'
-    #                         end = ' every ' + str(factor) + ' hours)'
-    #                         sub_title = sub_title + ' (profile sub-sampled to one observation' + end
-
-    #                     print('Making a profile plot of: ' + p_url)
-    #                     read_data = pd.read_csv(p_url, skiprows=[1])
-    #                     read_data = read_data.sort_values('time')
-    #                     read_data['site_code'] = read_data['site_code'].astype(str)
-    #                     read_data.loc[:, 'text_time'] = read_data['time'].astype(str)
-    #                     read_data.loc[:, 'time'] = pd.to_datetime(read_data['time'])
-    #                     plot_units = ''
-    #                     for vidx, p_var in enumerate(search['short_names']):
-    #                         read_data = read_data[read_data[p_var].notna()]
-    #                         read_data = read_data[read_data['time'].notna()]
-                            
-    #                         plot_units = '(' + to_plot['depth_units'] + ')'
-    #                         read_data['text'] = p_var + '<br>' + read_data['text_time'] + '<br>' + \
-    #                                             d_name + '=' + read_data[d_name].astype(str) + '<br>' + \
-    #                                             p_var + '=' + read_data[p_var].apply(lambda x: '{0:.2f}'.format(x))
-    #                         y_title = d_name + ' ' + plot_units
-    #                         trace = go.Scattergl(x=read_data['time'], y=read_data[d_name],
-    #                                              connectgaps=False,
-    #                                              name=p_var,
-    #                                              mode='markers',
-    #                                              hovertext=read_data['text'],
-    #                                              marker=dict(
-    #                                                  cmin=read_data[p_var].min(),
-    #                                                  cmax=read_data[p_var].max(),
-    #                                                  color=read_data[p_var],
-    #                                                  colorscale='inferno',
-    #                                                  colorbar=dict(
-    #                                                     title_side='right',
-    #                                                     title_font_size=16,
-    #                                                     tickfont_size=16,
-    #                                                     title_text=p_var + ' (' + units_by_did[p_did][p_var] + ')'
-    #                                                  )
-    #                                              ),
-    #                                              hoverinfo="text",
-    #                                              hoverlabel=dict(namelength=-1),
-    #                                              )
-
-                            
-    #     figure = go.Figure()
-    #     figure.add_trace(trace)
-    #     graph_height = height_of_profile_row 
-    #     figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
-    #     figure.update_yaxes(title=y_title)
-    #     figure.add_annotation(
-    #         xref='x domain',
-    #         yref='y domain',
-    #         xanchor='right',
-    #         yanchor='bottom',
-    #         x=1.0,
-    #         y=-.25,
-    #         font_size=22,
-    #         text=bottom_title,
-    #         showarrow=False,
-    #         bgcolor='rgba(255,255,255,.85)',
-    #     )
-    #     figure['layout'].update(height=graph_height, margin=dict(l=80, r=80, b=80, t=80, ), paper_bgcolor="white", plot_bgcolor='white')
-    #     figure.update_layout(plot_bgcolor=plot_bg, legend_tracegroupgap=profile_legend_gap,  title = {'text': sub_title, 'x':.01, 'font_size': 22, 'xanchor': 'left', 'xref': 'paper'},)
-    #     figure.update_xaxes({
-    #         'range':[read_data['time'].min(), read_data['time'].max()],
-    #         # 'autorange': True,
-    #         'ticklabelmode': 'period',
-    #         'showticklabels': True,
-    #         'gridcolor': line_rgb,
-    #         'zeroline': True,
-    #         'zerolinecolor': line_rgb,
-    #         'showline': True,
-    #         'linewidth': 1,
-    #         'linecolor': line_rgb,
-    #         'mirror': True,
-    #         'tickfont': {'size': 16},
-    #         'tickformatstops' : [
-    #                 dict(dtickrange=[1000, 60000], value="%H:%M:%S\n%d%b%Y"),
-    #                 dict(dtickrange=[60000, 3600000], value="%H:%M\n%d%b%Y"),
-    #                 dict(dtickrange=[3600000, 86400000], value="%H:%M\n%d%b%Y"),
-    #                 dict(dtickrange=[86400000, 604800000], value="%e\n%b %Y"),
-    #                 dict(dtickrange=[604800000, "M1"], value="%b\n%Y"),
-    #                 dict(dtickrange=["M1", "M12"], value="%b\n%Y"),
-    #                 dict(dtickrange=["M12", None], value="%Y")
-    #             ]            
-    #         }
-    #         )
-    #     figure.update_yaxes({
-    #         'autorange': 'reversed',
-    #         'gridcolor': line_rgb,
-    #         'zeroline': True,
-    #         'zerolinecolor': line_rgb,
-    #         'showline': True,
-    #         'linewidth': 1,
-    #         'linecolor': line_rgb,
-    #         'mirror': True,
-    #         'tickfont': {'size': 16},
-    #         'titlefont': {'size': 16},
-    #         })
-
-    # return [plot_title, figure, list_group, '']
+    return [row_style, figure, meta_link, html_link, nc_link, csv_link, True, factor, '']
 
 
 @app.callback(
     [
-        Output('time-range-slider', 'value'),
+        Output('time-range-slider', 'value', allow_duplicate=True),
         Output('start-date', 'value'),
         Output('end-date', 'value')
     ],
@@ -1023,12 +762,12 @@ def make_plots(selection_data, plot_start_date, plot_end_date, active_platforms,
 def set_date_range_from_slider(slide_values, in_start_date, in_end_date,):
 
     if slide_values is None:
-        raise dash.exceptions.PreventUpdate
+        raise exceptions.PreventUpdate
 
     range_min = all_start_seconds
     range_max = all_end_seconds
 
-    ctx = dash.callback_context
+    ctx = callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
     start_seconds = slide_values[0]
@@ -1100,14 +839,11 @@ def set_date_range_from_slider(slide_values, in_start_date, in_end_date,):
     ], prevent_initial_call=True
 )
 def allow_resample(layoutData, factor):
-    print('got relayout')
-    print(layoutData)
     if layoutData is not None and 'xaxis.range[0]' in layoutData and 'xaxis.range[1]' in layoutData:
         if factor > 0:
             min = layoutData['xaxis.range[0]']
             max = layoutData['xaxis.range[1]']
             xrange = {'min': min, 'max': max}
-            print('setting xrange', str(xrange))
             return [False, json.dumps(xrange)]
     return [True, '']
 
