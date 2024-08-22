@@ -38,7 +38,7 @@ else:
     celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
     background_callback_manager = CeleryManager(celery_app)
 
-version = ' Version v2.0'  # Both plots same x-axis, timeseries of all depths
+version = ' Version v2.0.1'  # Both plots same x-axis, timeseries of all depths
 empty_color = '#999999'
 has_data_color = 'black'
 
@@ -583,7 +583,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
         if d_name != 'depth':
             vlist.append(d_name)
         pvars = ','.join(vlist)
-        sub_title = selected_platform
+        sub_title = str(to_plot['long_name'].values[0]) + ' (' + to_plot['units'].values[0] + ') at ' + selected_platform
         bottom_title = to_plot['title'].values[0]
         p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
         # p_url = p_url + '&depth<3.5'  # use only surface for time series
