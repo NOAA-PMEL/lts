@@ -195,7 +195,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
         dcc.Link('HTML  |', href='', id='download-html', target='_blank'),
         dcc.Link('netCDF  |', href='', id='download-netcdf', target='_blank'), 
         dcc.Link('csv ', href='', id='download-csv', target='_blank'),
-        ddk.CardFooter(dcc.Link('View ERDDAP Data Page', id='download-metadata', href=''))
+        ddk.CardFooter(dcc.Link('View ERDDAP Data Page', id='download-metadata', href='', target='_blank'))
     ])
 ])
 
