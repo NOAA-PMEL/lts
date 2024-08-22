@@ -408,7 +408,6 @@ def change_data_parameter(in_radio):
         State('radio-items', 'value')
     ], prevent_initial_call=True)
 def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_platform, in_map, in_question):
-
     center = {'lon': 0.0, 'lat': 0.0}
     zoom = 1.4
     if in_map and 'mapbox.zoom' in in_map:
@@ -590,7 +589,8 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
         # p_url = p_url + '&depth<3.5'  # use only surface for time series
         p_var = config[question_choice]['short_names'][0]
         days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
-        factor = int((days_in_request * 24) / max_time_series_points)
+        # Take into account the number of depths in the factor calculation, but not fully since not all depths are available at all times.
+        factor = int((days_in_request * 24)*(int(to_plot['depth_count'].values[0]/2)) / max_time_series_points)
         # print('days=', days_in_request,'maxpoints=', max_time_series_points, 'factor=',factor)
         
 
