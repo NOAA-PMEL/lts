@@ -88,8 +88,14 @@ for site in temperature_sites['site_code'].sort_values().values:
 all_start = temperature_sites['start_time'].min()
 all_end = temperature_sites['end_time'].max()
 
-all_start_seconds = dateutil.parser.isoparse(all_start).timestamp()
-all_end_seconds = dateutil.parser.isoparse(all_end).timestamp()
+starto = dateutil.parser.isoparse(all_start)
+endo = dateutil.parser.isoparse(all_end)
+
+all_start = datetime.datetime.strftime(starto, d_format)
+all_end = datetime.datetime.strftime(endo, d_format)
+
+all_start_seconds = starto.timestamp()
+all_end_seconds = endo.timestamp()
 
 time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
@@ -114,9 +120,8 @@ app.layout = ddk.App(theme=theme.theme, children=[
     html.Div(id='data-div', style={'display': 'none'}),
     ddk.Card(width=.3, children=[
         ddk.Card(width=1, children=[
-            dcc.Loading(html.Div(id='loading-div', style={'display':'none'})),
             ddk.Modal(hide_target=True, target_id='download-card', width='40%', children=[
-                html.Button('Download Data', id='download-button',)
+                dcc.Loading(html.Button('Download Data', id='download-button', disabled=True))
             ])
         ]),
         ddk.Card(width=1, children=[
@@ -155,7 +160,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
     ]),
     ddk.Card(id='plot-row', width=1, style={'display': 'none'}, children=[
         ddk.CardHeader(children=[
-            html.Button(id='resample', children='Reample', disabled=True)
+            html.Button(id='resample', children='Resample', disabled=True)
         ]),    
         ddk.Graph(id='plot-graph', config=graph_config)
     ]),
@@ -191,11 +196,11 @@ app.layout = ddk.App(theme=theme.theme, children=[
         ]),
     ]),
     ddk.Card(id='download-card', children=[
-        ddk.CardHeader('Download the data a full resolution.'),
+        ddk.CardHeader('Download the data at full resolution.'),
         dcc.Link('HTML  |', href='', id='download-html', target='_blank'),
         dcc.Link('netCDF  |', href='', id='download-netcdf', target='_blank'), 
         dcc.Link('csv ', href='', id='download-csv', target='_blank'),
-        ddk.CardFooter(dcc.Link('View ERDDAP Data Page', id='download-metadata', href='', target='_blank'))
+        ddk.CardFooter(dcc.Link('View the ERDDAP Data Page', id='download-metadata', href='', target='_blank'))
     ])
 ])
 
@@ -538,7 +543,7 @@ def update_selected_platform(click, state_parameter):
         Output('download-csv', 'href'),
         Output('resample', 'disabled', allow_duplicate=True),
         Output('factor', 'data'),
-        Output('loading-div', 'children')
+        Output('download-button', 'disabled')
     ],
     [
         Input('sites', 'value'),
@@ -563,14 +568,14 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
     nc_link = ''
     csv_link = ''
     if selected_platform is None:
-        return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update]
+        return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, True]
     if active_platforms is not None:
         active = pd.read_json(json.loads(active_platforms))
     if active is not None and selected_platform is not None and question_choice is not None:
         plot_time = '&time>=' + plot_start_date + '&time<=' + plot_end_date
         to_plot = active.loc[active['site_code'] == selected_platform]
         if to_plot.empty:
-            return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update]
+            return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, True]
         
         p_url = to_plot['url'].values[0]
         meta_link = p_url
@@ -628,7 +633,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
             data_at_depth = data_at_depth.sort_values('time')
             data_nan_gaps = make_gaps(data_at_depth, sfre)
             trace = px.line(data_nan_gaps, x='time', y=p_var, hover_data=['time', p_var, 'depth'])
-            trace.update_traces(showlegend=True, name=str(gap_depth),line=dict(color=cc.b_glasbey_bw_minc_20[idx]))
+            trace.update_traces(showlegend=True, name=str(gap_depth), line=dict(color=cc.b_glasbey_bw_minc_20[idx]))
             figure.add_trace(list(trace.select_traces())[0], 1, 1)
 
         figure.update_yaxes(title=y_title)
@@ -638,19 +643,6 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
                              title = {'text': sub_title, 'x':.01, 'font_size': 22, 'xanchor': 'left', 'xref': 'paper'},
                              legend=dict(title='Depth', orientation="v", yanchor="top", y=1.1, xanchor="right", x=1.08, bgcolor='white', font_size=16))
         figure.update_annotations(x=.01, font_size=22, xanchor='left', xref='x domain')
-
-        # figure.add_annotation(
-        #     xref='x domain',
-        #     yref='y domain',
-        #     xanchor='right',
-        #     yanchor='bottom',
-        #     x=1.0,
-        #     y=-.20,
-        #     font_size=22,
-        #     text=bottom_title,
-        #     showarrow=False,
-        #     bgcolor='rgba(255,255,255,.85)',
-        # )
 
         figure.update_xaxes({
             'ticklabelmode': 'period',
@@ -744,7 +736,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
         }, row=2, col=1)
         figure.add_trace(trace, 2, 1)
 
-    return [row_style, figure, meta_link, html_link, nc_link, csv_link, True, factor, '']
+    return [row_style, figure, meta_link, html_link, nc_link, csv_link, True, factor, False]
 
 
 @app.callback(
@@ -760,7 +752,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
     ], prevent_initial_call=True
 )
 def set_date_range_from_slider(slide_values, in_start_date, in_end_date,):
-
+    print('time range has fired')
     if slide_values is None:
         raise exceptions.PreventUpdate
 
