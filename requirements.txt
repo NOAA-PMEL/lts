@@ -7,5 +7,6 @@ Werkzeug
 colorcet
 celery
 diskcache
+dash-ag-grid
 dash_enterprise_libraries
 git+https://github.com/noaaroland/sdig.git

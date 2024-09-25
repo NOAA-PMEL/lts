@@ -6,6 +6,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 import dash_design_kit as ddk
 import colorcet as cc
+import dash_ag_grid as dag
 
 
 # pytyony stuff
@@ -120,7 +121,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
     html.Div(id='data-div', style={'display': 'none'}),
     ddk.Card(width=.3, children=[
         ddk.Card(width=1, children=[
-            ddk.Modal(hide_target=True, target_id='download-card', width='40%', children=[
+            ddk.Modal(hide_target=True, target_id='download-card', width='425px', height='380', children=[
                 dcc.Loading(html.Button('Download Data', id='download-button', disabled=True))
             ])
         ]),
@@ -197,9 +198,26 @@ app.layout = ddk.App(theme=theme.theme, children=[
     ]),
     ddk.Card(id='download-card', children=[
         ddk.CardHeader('Download the data at full resolution.'),
-        dcc.Link('HTML  |', href='', id='download-html', target='_blank'),
-        dcc.Link('netCDF  |', href='', id='download-netcdf', target='_blank'), 
-        dcc.Link('csv ', href='', id='download-csv', target='_blank'),
+        dag.AgGrid(
+            style={'height': 250},
+            id="download-grid",
+            defaultColDef={"cellRenderer": "markdown"},
+            columnDefs=[
+                {'field': 'label', 'headerName': 'File Type'},
+                {'field': 'link', "linkTarget":"_blank",
+                    "cellStyle": {
+                        "color": "rgb(31, 120, 180)",
+                        "text-decoration": "underline",
+                        "cursor": "pointer",
+                    },
+                }
+            ],
+            rowData=[
+                {'label': 'HTML', 'link': "html"},
+                {'label': 'netCDF', 'link': '.ncCF File'},
+                {'label': 'CSV', 'link': '.csv File'},
+            ]
+        ),
         ddk.CardFooter(dcc.Link('View the ERDDAP Data Page', id='download-metadata', href='', target='_blank'))
     ])
 ])
@@ -538,9 +556,7 @@ def update_selected_platform(click, state_parameter):
         Output('plot-row', 'style'),
         Output('plot-graph', 'figure'),
         Output('download-metadata', 'href'),
-        Output('download-html', 'href'),
-        Output('download-netcdf', 'href'),
-        Output('download-csv', 'href'),
+        Output('download-grid', 'rowData'),
         Output('resample', 'disabled', allow_duplicate=True),
         Output('factor', 'data'),
         Output('download-button', 'disabled')
@@ -568,14 +584,14 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
     nc_link = ''
     csv_link = ''
     if selected_platform is None:
-        return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, True]
+        return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, True]
     if active_platforms is not None:
         active = pd.read_json(json.loads(active_platforms))
     if active is not None and selected_platform is not None and question_choice is not None:
         plot_time = '&time>=' + plot_start_date + '&time<=' + plot_end_date
         to_plot = active.loc[active['site_code'] == selected_platform]
         if to_plot.empty:
-            return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, no_update, no_update, True]
+            return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, True]
         
         p_url = to_plot['url'].values[0]
         meta_link = p_url
@@ -735,8 +751,12 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
             'titlefont': {'size': 16},
         }, row=2, col=1)
         figure.add_trace(trace, 2, 1)
-
-    return [row_style, figure, meta_link, html_link, nc_link, csv_link, True, factor, False]
+    link_grid = [
+        {'label': 'HTML', 'link': f"[HTML Table]({html_link})"},
+        {'label': 'netCDF', 'link': f'[.ncCF File]({nc_link})'},
+        {'label': 'CSV', 'link': f'[.csv File]({csv_link})'},
+    ]
+    return [row_style, figure, meta_link, link_grid, True, factor, False]
 
 
 @app.callback(
@@ -752,7 +772,6 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
     ], prevent_initial_call=True
 )
 def set_date_range_from_slider(slide_values, in_start_date, in_end_date,):
-    print('time range has fired')
     if slide_values is None:
         raise exceptions.PreventUpdate
 
