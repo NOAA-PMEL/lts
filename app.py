@@ -39,7 +39,7 @@ else:
     celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
     background_callback_manager = CeleryManager(celery_app)
 
-version = ' Version v2.0.1'  # Both plots same x-axis, timeseries of all depths
+version = ' Version v2.1'  # Fancy download table.
 empty_color = '#999999'
 has_data_color = 'black'
 
@@ -121,7 +121,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
     html.Div(id='data-div', style={'display': 'none'}),
     ddk.Card(width=.3, children=[
         ddk.Card(width=1, children=[
-            ddk.Modal(hide_target=True, target_id='download-card', width='425px', height='380', children=[
+            ddk.Modal(hide_target=True, target_id='download-card', width='225px', height='380', children=[
                 dcc.Loading(html.Button('Download Data', id='download-button', disabled=True))
             ])
         ]),
@@ -197,14 +197,13 @@ app.layout = ddk.App(theme=theme.theme, children=[
         ]),
     ]),
     ddk.Card(id='download-card', children=[
-        ddk.CardHeader('Download the data at full resolution.'),
+        ddk.CardHeader('Download the data at full resolution:'),
         dag.AgGrid(
             style={'height': 250},
             id="download-grid",
             defaultColDef={"cellRenderer": "markdown"},
             columnDefs=[
-                {'field': 'label', 'headerName': 'File Type'},
-                {'field': 'link', "linkTarget":"_blank",
+                {'field': 'link', "linkTarget":"_blank", 'headerName': 'Download Format',
                     "cellStyle": {
                         "color": "rgb(31, 120, 180)",
                         "text-decoration": "underline",
@@ -212,11 +211,6 @@ app.layout = ddk.App(theme=theme.theme, children=[
                     },
                 }
             ],
-            rowData=[
-                {'label': 'HTML', 'link': "html"},
-                {'label': 'netCDF', 'link': '.ncCF File'},
-                {'label': 'CSV', 'link': '.csv File'},
-            ]
         ),
         ddk.CardFooter(dcc.Link('View the ERDDAP Data Page', id='download-metadata', href='', target='_blank'))
     ])
@@ -752,9 +746,9 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
         }, row=2, col=1)
         figure.add_trace(trace, 2, 1)
     link_grid = [
-        {'label': 'HTML', 'link': f"[HTML Table]({html_link})"},
-        {'label': 'netCDF', 'link': f'[.ncCF File]({nc_link})'},
-        {'label': 'CSV', 'link': f'[.csv File]({csv_link})'},
+        {'link': f"[HTML Table]({html_link})"},
+        {'link': f'[CF netCDF File]({nc_link})'},
+        {'link': f'[CSV File]({csv_link})'},
     ]
     return [row_style, figure, meta_link, link_grid, True, factor, False]
 
