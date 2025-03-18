@@ -431,10 +431,10 @@ def change_data_parameter(in_radio):
 def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_platform, in_map, in_question):
     center = {'lon': 0.0, 'lat': 0.0}
     zoom = 1.4
-    if in_map and 'mapbox.zoom' in in_map:
-        zoom = in_map['mapbox.zoom']
-    if in_map and 'mapbox.center' in in_map:
-        center = in_map['mapbox.center']
+    if in_map and 'map.zoom' in in_map:
+        zoom = in_map['map.zoom']
+    if in_map and 'map.center' in in_map:
+        center = in_map['map.center']
 
     location_map = go.Figure()
     selected_plat = None
@@ -452,7 +452,7 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
         
         no_trace = None
         if data_for_no.shape[0] > 0:
-            no_trace = go.Scattermapbox(lat=data_for_no['latitude'],
+            no_trace = go.Scattermap(lat=data_for_no['latitude'],
                                         lon=data_for_no['longitude'],
                                         hovertext=data_for_no['site_code'],
                                         hoverinfo='lat+lon+text',
@@ -461,7 +461,7 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
                                         mode='markers')
         yes_trace = None
         if data_for_yes.shape[0] > 0:
-            yes_trace = go.Scattermapbox(lat=data_for_yes['latitude'],
+            yes_trace = go.Scattermap(lat=data_for_yes['latitude'],
                                          lon=data_for_yes['longitude'],
                                          hovertext=data_for_yes['site_code'],
                                          hoverinfo='lat+lon+text',
@@ -475,7 +475,7 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
 
     if selected_plat is not None:
         
-        yellow_trace = go.Scattermapbox(lat=selected_plat['latitude'].values,
+        yellow_trace = go.Scattermap(lat=selected_plat['latitude'].values,
                                         lon=selected_plat['longitude'].values,
                                         hovertext=selected_plat['site_code'].values,
                                         hoverinfo='lat+lon+text',
@@ -485,8 +485,8 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
         location_map.add_trace(yellow_trace)
     location_map.update_layout(
         showlegend=False,
-        mapbox_style="white-bg",
-        mapbox_layers=[
+        map_style="white-bg",
+        map_layers=[
             {
                 "below": 'traces',
                 "sourcetype": "raster",
@@ -496,8 +496,8 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
                 ]
             }
         ],
-        mapbox_zoom=zoom,
-        mapbox_center=center,
+        map_zoom=zoom,
+        map_center=center,
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
         legend=dict(
             orientation="v",
@@ -687,7 +687,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
                              'linecolor': line_rgb,
                              'mirror': True,
                              'tickfont': {'size': 16},
-                             'titlefont': {'size': 16},
+                             'title': {'font':{'size': 16}},
                              })
         d_units = to_plot['depth_units'].values[0]
         read_data = read_data[read_data[p_var].notna()]
@@ -746,7 +746,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
             'linecolor': line_rgb,
             'mirror': True,
             'tickfont': {'size': 16},
-            'titlefont': {'size': 16},
+            'title': {'font':{'size': 16}},
         }, row=2, col=1)
         figure.add_trace(trace, 2, 1)
     link_grid = [
