@@ -29,7 +29,7 @@ https://community.plotly.com/t/plotly-6-map-attribution-box-positioning/91228
   
   .maplibregl-ctrl-attrib-inner {
     background-color: lightgray;
-    /* border-radius: 4px; */
+    border-radius: 10px;
   }
   
   /*This is necessary to remove spacing below the canvas.*/
