@@ -28,6 +28,9 @@ from sdig.erddap.info import Info
 
 import theme
 
+data_url_base = 'https://data.pmel.noaa.gov/pmel/'
+nobs_url_base = 'http://hazy.pmel.noaa.gov:8140/'
+
 if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
     # For testing...
     import diskcache
@@ -313,10 +316,11 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         vars_string = ','.join(vars_to_get)
         for dataset_to_check in config[in_data_question]['datasets']:
             locations_to_map = locations.loc[locations['url']==dataset_to_check]
-            dataset_to_check = dataset_to_check.replace('generic', 'pmel')  # Change the data url for the NOBS url 
+            dataset_to_check = dataset_to_check.replace(data_url_base, nobs_url_base)  # Change the data url for the NOBS url 
             have_url = dataset_to_check + '.csv?' + vars_string + urllib.parse.quote(time_constraint, safe='&()=:/')
             have = None
             try:
+                # DEBUG print(f'trying have url {have_url}')
                 have = pd.read_csv(have_url, skiprows=[1])
             except Exception as he:
                 print(he)
@@ -366,7 +370,6 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
                     else:
                         all_without_data = pd.concat([all_without_data, no_data])
             else:
-                locations_to_map['platform_color'] = empty_color
                 if all_without_data is None:
                     all_without_data = locations_to_map
                 else:
@@ -387,6 +390,7 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         locations_with_data = json.dumps(all_with_data.to_json())
     if all_without_data is not None:
         all_without_data.reset_index(inplace=True, drop=True)
+        all_without_data.loc[:,'platform_color'] = empty_color
         locations_without_data = json.dumps(all_without_data.to_json())
     return [locations_with_data, locations_without_data, '']
 
