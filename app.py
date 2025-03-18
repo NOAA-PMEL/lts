@@ -490,9 +490,9 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
             {
                 "below": 'traces',
                 "sourcetype": "raster",
-                "sourceattribution": "Powered by Esri",
+                "sourceattribution": "&nbsp;GEBCO &amp; NCEI&nbsp;",
                 "source": [
-                    "https://ibasemaps-api.arcgis.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}?token=" + ESRI_API_KEY
+                    'https://tiles.arcgis.com/tiles/C8EMgrsFcRFL6LrL/arcgis/rest/services/GEBCO_basemap_NCEI/MapServer/tile/{z}/{y}/{x}'
                 ]
             }
         ],
