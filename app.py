@@ -881,4 +881,4 @@ def set_time_for_resample(click, state_range):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)
