@@ -28,7 +28,7 @@ https://community.plotly.com/t/plotly-6-map-attribution-box-positioning/91228
   }
   
   .maplibregl-ctrl-attrib-inner {
-    background-color: lightgray;
+    background-color: rgb(241, 237, 237);
     border-radius: 10px;
   }
   
