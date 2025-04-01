@@ -37,6 +37,8 @@ if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
     cache = diskcache.Cache("./cache")
     background_callback_manager = DiskcacheManager(cache)
 else:
+    from celery import Celery
+    
     redis_instance = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
     parsed_url = urllib.parse.urlparse(redis_instance)._replace(scheme="redis")
 
