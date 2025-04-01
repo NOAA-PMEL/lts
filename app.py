@@ -37,9 +37,25 @@ if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
     cache = diskcache.Cache("./cache")
     background_callback_manager = DiskcacheManager(cache)
 else:
-    # For production...
-    from celery import Celery
-    celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
+    redis_instance = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
+    parsed_url = urllib.parse.urlparse(redis_instance)._replace(scheme="redis")
+
+    try:
+        i = 0 if parsed_url.path in ["", "/"] else int(parsed_url.path[1:])
+    except ValueError:
+        raise Exception("Redis database should be a number")
+
+    if os.environ.get("DASH_ENTERPRISE_ENV") == "WORKSPACE":
+        i += 2
+
+    if i > 14:
+        raise Exception("Maximum Redis database number is 15")
+
+    REDIS_BROKER_URL = parsed_url._replace(path=f"/{i}").geturl()
+    REDIS_BACKEND_URL = parsed_url._replace(path=f"/{i + 1}").geturl()
+
+    #  Defining the Celery instance
+    celery_app = Celery(__name__, broker=REDIS_BROKER_URL, backend=REDIS_BACKEND_URL)
     background_callback_manager = CeleryManager(celery_app)
 
 version = ' Version v2.1'  # Fancy download table.
@@ -483,6 +499,7 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
                                         marker={'color': 'yellow', 'size': 15},
                                         mode='markers')
         location_map.add_trace(yellow_trace)
+
     location_map.update_layout(
         showlegend=False,
         map_style="white-bg",
