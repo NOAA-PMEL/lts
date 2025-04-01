@@ -1,4 +1,3 @@
---extra-index-url https://viz-temp.pmel.noaa.gov/packages
 plotly>=6.0.1
 gunicorn
 pandas
@@ -9,5 +8,5 @@ colorcet
 celery
 diskcache
 dash-ag-grid
-dash_enterprise_libraries
+-r enterprise_requirements.txt
 git+https://github.com/noaaroland/sdig.git
