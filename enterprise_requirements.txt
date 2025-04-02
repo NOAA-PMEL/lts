@@ -1,2 +1,2 @@
---extra-index-url https://viz-temp.pmel.noaa.gov/packages
-dash_enterprise_libraries>=1.1
+--extra-index-url https://dash-temp.pmel.noaa.gov/packages
+dash-enterprise-libraries>1.5
