@@ -9,5 +9,5 @@ colorcet
 celery
 diskcache
 dash-ag-grid
-dash-enterprise-libraries
+dash-enterprise-libraries>=1.5.2
 git+https://github.com/noaaroland/sdig.git
