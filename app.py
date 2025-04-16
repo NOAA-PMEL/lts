@@ -25,6 +25,7 @@ import urllib
 
 # My stuff
 from sdig.erddap.info import Info
+import constants
 
 import theme
 
@@ -311,11 +312,11 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
     if in_start_date is not None and in_end_date is not None:
         n_start_obj = dateutil.parser.isoparse(in_start_date)
         n_start_obj.replace(day=1, hour=0)
-        time_constraint = time_constraint + '&time>=' + n_start_obj.isoformat()
+        time_constraint = time_constraint + "time>='" + n_start_obj.isoformat()+"'"
 
         n_end_obj = dateutil.parser.isoparse(in_end_date)
         n_end_obj.replace(day=1, hour=0)
-        time_constraint = time_constraint + '&time<=' + n_end_obj.isoformat()
+        time_constraint = time_constraint + " AND time<='" + n_end_obj.isoformat()+"'"
         if n_start_obj.year != n_end_obj.year:
             count_by = '1year'
         elif n_start_obj.year == n_end_obj.year and n_start_obj.month != n_end_obj.month:
@@ -328,70 +329,63 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         else:
             locations = salinity_sites
         short_names = config[in_data_question]['short_names']
-        vars_to_get = short_names.copy()
+        # Double quotes for case sensitive column names
+        vars_to_get = ['"' + element + '"' for element in short_names]
         vars_to_get.append('time')
         vars_to_get.append('site_code')
         vars_string = ','.join(vars_to_get)
+        with constants.postgres_engine.connect() as conn:
+            have = pd.read_sql(f'SELECT {vars_string} FROM nobs WHERE {time_constraint}', con=conn)
+        locations_to_map = None
         for dataset_to_check in config[in_data_question]['datasets']:
-            locations_to_map = locations.loc[locations['url']==dataset_to_check]
-            dataset_to_check = dataset_to_check.replace(data_url_base, nobs_url_base)  # Change the data url for the NOBS url 
-            have_url = dataset_to_check + '.csv?' + vars_string + urllib.parse.quote(time_constraint, safe='&()=:/')
-            have = None
-            try:
-                # DEBUG print(f'trying have url {have_url}')
-                have = pd.read_csv(have_url, skiprows=[1])
-            except Exception as he:
-                print(he)
-                if 'httpError' in type(he).__class__.__name__:
-                    html_response = he.read()
-                    encoding = he.headers.get_content_charset('utf-8')
-                    decoded_html = html_response.decode(encoding)
-                    print(decoded_html)
-                    print('exception getting counts on ' + have_url)
-                    pass
-            if have is not None:
-                csum = have.groupby(['site_code']).sum().reset_index()
-                csum['site_code'] = csum['site_code'].astype(str)
-                sum_n = None
-                if join_type == 'or':
-                    csum['has_data'] = csum[short_names].sum(axis=1)
-                    csum = csum.sort_values('site_code')
-                    locations_to_map = locations_to_map.sort_values('site_code')
-                    sum_n = csum.loc[csum['has_data'] > 0]
-                if join_type == 'and':
-                    criteria = ''
-                    for vix, v in enumerate(short_names):
-                        if vix > 0:
-                            criteria = criteria + ' & '
-                        criteria = criteria + '(csum[\'' + v + '\']' + ' > 0)'
-                    criteria = 'csum[(' + criteria + ')]'
-                    # eval dereferences all the stuff in the string and runs it
-                    sum_n = pd.eval(criteria)
-                if sum_n is not None and sum_n.shape[0] > 0:
-                    # sum_n is the platforms that have data.
-                    # This merge operation (as explained here:
-                    # https://stackoverflow.com/questions/53645882/pandas-merging-101/53645883#53645883)
-                    # combines the locations data frame with
-                    # the information about which sites have observations to make something
-                    # that can be plotted.
-                    some_data = locations_to_map.merge(sum_n, on='site_code', how='inner')
-                    some_data['platform_color'] = has_data_color
-                    if all_with_data is None:
-                        all_with_data = some_data
-                    else:
-                        all_with_data = pd.concat([all_with_data, some_data])
-                    criteria = locations_to_map.site_code.isin(some_data.site_code) == False
-                    no_data = locations_to_map.loc[criteria].reset_index()
-                    no_data['platform_color'] = empty_color
-                    if all_without_data is None:
-                        all_without_data = no_data
-                    else:
-                        all_without_data = pd.concat([all_without_data, no_data])
+            ltm = locations.loc[locations['url']==dataset_to_check]
+            if locations_to_map is None:
+                locations_to_map = ltm
             else:
-                if all_without_data is None:
-                    all_without_data = locations_to_map
+                locations_to_map = pd.concat([locations_to_map, ltm])
+        if have is not None:
+            csum = have.groupby(['site_code']).sum().reset_index()
+            csum['site_code'] = csum['site_code'].astype(str)
+            sum_n = None
+            if join_type == 'or':
+                csum['has_data'] = csum[short_names].sum(axis=1)
+                csum = csum.sort_values('site_code')
+                locations_to_map = locations_to_map.sort_values('site_code')
+                sum_n = csum.loc[csum['has_data'] > 0]
+            if join_type == 'and':
+                criteria = ''
+                for vix, v in enumerate(short_names):
+                    if vix > 0:
+                        criteria = criteria + ' & '
+                    criteria = criteria + '(csum[\'' + v + '\']' + ' > 0)'
+                criteria = 'csum[(' + criteria + ')]'
+                # eval dereferences all the stuff in the string and runs it
+                sum_n = pd.eval(criteria)
+            if sum_n is not None and sum_n.shape[0] > 0:
+                # sum_n is the platforms that have data.
+                # This merge operation (as explained here:
+                # https://stackoverflow.com/questions/53645882/pandas-merging-101/53645883#53645883)
+                # combines the locations data frame with
+                # the information about which sites have observations to make something
+                # that can be plotted.
+                some_data = locations_to_map.merge(sum_n, on='site_code', how='inner')
+                some_data['platform_color'] = has_data_color
+                if all_with_data is None:
+                    all_with_data = some_data
                 else:
-                    all_without_data = pd.concat([all_without_data, locations_to_map])
+                    all_with_data = pd.concat([all_with_data, some_data])
+                criteria = locations_to_map.site_code.isin(some_data.site_code) == False
+                no_data = locations_to_map.loc[criteria].reset_index()
+                no_data['platform_color'] = empty_color
+                if all_without_data is None:
+                    all_without_data = no_data
+                else:
+                    all_without_data = pd.concat([all_without_data, no_data])
+        else:
+            if all_without_data is None:
+                all_without_data = locations_to_map
+            else:
+                all_without_data = pd.concat([all_without_data, locations_to_map])
     # else:
     #     locations_to_map = locations;
     #     locations_to_map['platform_color'] = empty_color
