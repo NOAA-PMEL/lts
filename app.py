@@ -61,8 +61,8 @@ else:
     celery_app = Celery(__name__, broker=REDIS_BROKER_URL, backend=REDIS_BACKEND_URL)
     background_callback_manager = CeleryManager(celery_app)
 
-version = ' Version v2.1'  # Fancy download table.
-empty_color = '#999999'
+version = ' Version v3.1'  # Fancy download table.
+empty_color = '#AAAAAA'
 has_data_color = 'black'
 
 seconds_in_day = 24 * 60 * 60
