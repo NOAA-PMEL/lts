@@ -1,6 +1,6 @@
 # Dash
 from dash_enterprise_libraries import EnterpriseDash
-from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, exceptions, no_update, exceptions, callback_context
+from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, exceptions, no_update, exceptions, ctx
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
@@ -101,6 +101,8 @@ for key in config:
 
 radio_value = 'temperature'
 
+# We could write these to a database, and read them from there at the start or each time we needed something
+# There is code to write a database in the config.ipynb, but for now I'm reading from teh file and making these in memory
 temperature_sites = pd.DataFrame.from_dict(config['temperature']['sites'], orient='index').reset_index().rename(columns={'index': 'site_code'})
 salinity_sites = pd.DataFrame.from_dict(config['salinity']['sites'], orient='index').reset_index().rename(columns={'index': 'site_code'})
 
@@ -119,6 +121,29 @@ all_end = datetime.datetime.strftime(endo, d_format)
 
 all_start_seconds = starto.timestamp()
 all_end_seconds = endo.timestamp()
+
+for site in salinity_sites['site_code'].sort_values().values:
+    site_options.append({'label': site, 'value': site})
+
+sal_all_start = salinity_sites['start_time'].min()
+sal_all_end = salinity_sites['end_time'].max()
+
+sal_starto = dateutil.parser.isoparse(sal_all_start)
+sal_endo = dateutil.parser.isoparse(sal_all_end)
+
+sal_start_seconds = sal_starto.timestamp()
+sal_end_seconds = sal_endo.timestamp()
+
+sal_start = datetime.datetime.strftime(sal_starto, d_format)
+sal_end = datetime.datetime.strftime(sal_endo, d_format)
+
+
+if sal_start_seconds < all_start_seconds:
+    all_start_seconds = sal_start_seconds
+    all_start = sal_start
+if sal_end_seconds > all_end_seconds:
+    all_end_seconds = sal_end_seconds
+    all_end = sal_end
 
 time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
@@ -326,8 +351,10 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
     if in_data_question is not None and len(in_data_question) > 0:
         if in_data_question == 'temperature':
             locations = temperature_sites
+            nobs_table = 'temperature_nobs'
         else:
             locations = salinity_sites
+            nobs_table = 'salinity_nobs'
         short_names = config[in_data_question]['short_names']
         # Double quotes for case sensitive column names
         vars_to_get = ['"' + element + '"' for element in short_names]
@@ -335,15 +362,18 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         vars_to_get.append('site_code')
         vars_string = ','.join(vars_to_get)
         with constants.postgres_engine.connect() as conn:
-            have = pd.read_sql(f'SELECT {vars_string} FROM nobs WHERE {time_constraint}', con=conn)
+            have = pd.read_sql(f'SELECT {vars_string} FROM {nobs_table} WHERE {time_constraint}', con=conn)
         locations_to_map = None
+        print('setting locations_to_map to None')
         for dataset_to_check in config[in_data_question]['datasets']:
             ltm = locations.loc[locations['url']==dataset_to_check]
             if locations_to_map is None:
                 locations_to_map = ltm
             else:
                 locations_to_map = pd.concat([locations_to_map, ltm])
+        print('after grabbing all locations there are ', locations_to_map.shape[0])
         if have is not None:
+            print('found some sites to test for data.')
             csum = have.groupby(['site_code']).sum().reset_index()
             csum['site_code'] = csum['site_code'].astype(str)
             sum_n = None
@@ -374,6 +404,7 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
                     all_with_data = some_data
                 else:
                     all_with_data = pd.concat([all_with_data, some_data])
+                print(all_with_data.shape[0], 'sites with data')
                 criteria = locations_to_map.site_code.isin(some_data.site_code) == False
                 no_data = locations_to_map.loc[criteria].reset_index()
                 no_data['platform_color'] = empty_color
@@ -381,18 +412,20 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
                     all_without_data = no_data
                 else:
                     all_without_data = pd.concat([all_without_data, no_data])
+                print(all_without_data.shape[0],'sites without data')
+            else:
+                print('there was nothing in sum_n')
+                if all_without_data is None:
+                    all_without_data = locations_to_map
+                else:
+                    all_without_data = pd.concat([all_without_data, locations_to_map])
+                all_without_data['platform_color'] = empty_color
         else:
             if all_without_data is None:
                 all_without_data = locations_to_map
             else:
                 all_without_data = pd.concat([all_without_data, locations_to_map])
-    # else:
-    #     locations_to_map = locations;
-    #     locations_to_map['platform_color'] = empty_color
-    #     if all_without_data is None:
-    #         all_without_data = locations_to_map
-    #     else:
-    #         all_without_data = pd.concat([all_without_data, locations_to_map])
+    
     locations_with_data = json.dumps(
         pd.DataFrame(columns=['latitude', 'longitude', 'site_code', 'platform_color'], index=[0], ).to_json())
     locations_without_data = json.dumps(
@@ -525,41 +558,20 @@ def make_location_map(in_active_platforms, in_inactive_platforms, in_selected_pl
 @app.callback(
     [
         Output('sites', 'value', allow_duplicate=True),
-        Output('time-range-slider', 'value', allow_duplicate=True),
     ],
     [
         Input('location-map', 'clickData'),
-    ],
-    [
-        State('radio-items', 'value')
     ], prevent_initial_call=True
 )
-def update_selected_platform(click, state_parameter):
-    if state_parameter is not None:
-        if state_parameter == 'temperature':
-            locations = temperature_sites
-        else:
-            locations = salinity_sites
-    else:
-        raise exceptions.PreventUpdate
-
+def update_selected_platform(click):
     selected_platform = None
-    start_date = all_start
-    end_date = all_end
     if click is not None:
         if 'points' in click:
             point_dict = click['points'][0]
             selected_platform = point_dict['customdata']
-            site = locations.loc[locations['site_code']==selected_platform]
-            start_date = site['start_time'].values[0]
-            end_date = site['end_time'].values[0]
-            selected_lat = point_dict['lat']
-            selected_lon = point_dict['lon']
-            
-            selection = json.dumps({'site_code': selected_platform, 'lat': selected_lat, 'lon': selected_lon})
-    starto = dateutil.parser.isoparse(start_date)
-    endo = dateutil.parser.isoparse(end_date)
-    return [selected_platform, [starto.timestamp(), endo.timestamp()]]
+ 
+    return [selected_platform]
+
 
 
 @app.callback(
@@ -577,13 +589,14 @@ def update_selected_platform(click, state_parameter):
         Input('start-date', 'value'),
         Input('end-date', 'value'),
         Input('active-platforms', 'data'),
+        Input('resample', 'n_clicks')
     ],
     [
         State('radio-items', 'value'),
-        State('time-range-slider', 'value'),
+        State('xrange', 'data'),
     ], prevent_initial_call=True, background=True
 )
-def make_plots(selected_platform, plot_start_date, plot_end_date, active_platforms, question_choice, slider_values):
+def make_plots(selected_platform, start_date_textbox, end_date_textbox, active_platforms, resample_click, question_choice, state_xrange, ):
     figure = {}
     query = ''
     row_style = {'display': 'block'}
@@ -594,6 +607,29 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
     html_link = ''
     nc_link = ''
     csv_link = ''
+
+
+
+   
+    if ctx.triggered_id == 'resample':
+        if state_xrange is not None and len(state_xrange) > 0:
+            xrange = json.loads(state_xrange)
+            if 'min' in xrange and 'max' in xrange:
+                plot_start_date = xrange['min']
+                plot_end_date = xrange['max']
+                plot_start_date_seconds = dateutil.parser.isoparse(plot_start_date).timestamp()
+                plot_end_date_seconds = dateutil.parser.isoparse(plot_end_date).timestamp()
+            else:
+                raise exceptions.PreventUpdate
+        else:
+            raise exceptions.PreventUpdate
+    else:
+        plot_start_date = start_date_textbox
+        plot_end_date = end_date_textbox
+        plot_start_date_seconds = dateutil.parser.isoparse(start_date_textbox).timestamp()
+        plot_end_date_seconds = dateutil.parser.isoparse(end_date_textbox).timestamp()
+                
+
     if selected_platform is None:
         return [{'display': 'none'}, no_update, no_update, no_update, no_update, no_update, True]
     if active_platforms is not None:
@@ -620,7 +656,7 @@ def make_plots(selected_platform, plot_start_date, plot_end_date, active_platfor
         p_url = p_url + '.csv?' + pvars + urllib.parse.quote(plot_time, safe='&()=:/') + '&site_code=' + urllib.parse.quote('"' + selected_platform + '"', safe='&()=:/')
         # p_url = p_url + '&depth<3.5'  # use only surface for time series
         p_var = config[question_choice]['short_names'][0]
-        days_in_request = (slider_values[1] - slider_values[0]) / seconds_in_day
+        days_in_request = (plot_end_date_seconds - plot_start_date_seconds) / seconds_in_day
         # Take into account the number of depths in the factor calculation, but not fully since not all depths are available at all times.
         factor = int((days_in_request * 24)*(int(to_plot['depth_count'].values[0]/2)) / max_time_series_points)
         # print('days=', days_in_request,'maxpoints=', max_time_series_points, 'factor=',factor)
@@ -789,7 +825,6 @@ def set_date_range_from_slider(slide_values, in_start_date, in_end_date,):
     range_min = all_start_seconds
     range_max = all_end_seconds
 
-    ctx = callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
     start_seconds = slide_values[0]
@@ -870,27 +905,27 @@ def allow_resample(layoutData, factor):
     return [True, '']
 
 
-@app.callback(
-    [
-        Output('time-range-slider', 'value', allow_duplicate=True),
-    ],
-    [
-        Input('resample', 'n_clicks')
-    ],
-    [
-        State('xrange', 'data')
-    ], prevent_initial_call=True
-)
-def set_time_for_resample(click, state_range):
-    if state_range is not None:
-        xrange = json.loads(state_range)
-        if 'min' in xrange and 'max' in xrange:
-            mint = xrange['min']
-            maxt = xrange['max']
-            mino = dateutil.parser.isoparse(mint)
-            maxo = dateutil.parser.isoparse(maxt)
-            return[[mino.timestamp(), maxo.timestamp()]]
-    return no_update
+# @app.callback(
+#     [
+#         Output('time-range-slider', 'value', allow_duplicate=True),
+#     ],
+#     [
+#         Input('resample', 'n_clicks')
+#     ],
+#     [
+#         State('xrange', 'data')
+#     ], prevent_initial_call=True
+# )
+# def set_time_for_resample(click, state_range):
+#     if state_range is not None:
+#         xrange = json.loads(state_range)
+#         if 'min' in xrange and 'max' in xrange:
+#             mint = xrange['min']
+#             maxt = xrange['max']
+#             mino = dateutil.parser.isoparse(mint)
+#             maxo = dateutil.parser.isoparse(maxt)
+#             return[[mino.timestamp(), maxo.timestamp()]]
+#     return no_update
 
 
 if __name__ == '__main__':
