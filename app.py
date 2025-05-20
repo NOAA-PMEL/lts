@@ -147,7 +147,8 @@ if sal_end_seconds > all_end_seconds:
 
 time_marks = Info.get_time_marks(all_start_seconds, all_end_seconds)
 
-app = EnterpriseDash(__name__, 
+app = EnterpriseDash(__name__,
+                title="OceanSITES Long Timeseries",
                 background_callback_manager=background_callback_manager,
                 )
 
@@ -156,7 +157,6 @@ server = app.server
 
 app.setup_shortcuts(
     logo=app.get_asset_url("os_logo.gif"),
-    title="OceanSITES Long Timeseries", # Default: app.title
     size="normal" # Can also be "slim"
 )
 
@@ -364,16 +364,13 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         with constants.postgres_engine.connect() as conn:
             have = pd.read_sql(f'SELECT {vars_string} FROM {nobs_table} WHERE {time_constraint}', con=conn)
         locations_to_map = None
-        print('setting locations_to_map to None')
         for dataset_to_check in config[in_data_question]['datasets']:
             ltm = locations.loc[locations['url']==dataset_to_check]
             if locations_to_map is None:
                 locations_to_map = ltm
             else:
                 locations_to_map = pd.concat([locations_to_map, ltm])
-        print('after grabbing all locations there are ', locations_to_map.shape[0])
         if have is not None:
-            print('found some sites to test for data.')
             csum = have.groupby(['site_code']).sum().reset_index()
             csum['site_code'] = csum['site_code'].astype(str)
             sum_n = None
@@ -404,7 +401,6 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
                     all_with_data = some_data
                 else:
                     all_with_data = pd.concat([all_with_data, some_data])
-                print(all_with_data.shape[0], 'sites with data')
                 criteria = locations_to_map.site_code.isin(some_data.site_code) == False
                 no_data = locations_to_map.loc[criteria].reset_index()
                 no_data['platform_color'] = empty_color
@@ -412,9 +408,7 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
                     all_without_data = no_data
                 else:
                     all_without_data = pd.concat([all_without_data, no_data])
-                print(all_without_data.shape[0],'sites without data')
             else:
-                print('there was nothing in sum_n')
                 if all_without_data is None:
                     all_without_data = locations_to_map
                 else:
