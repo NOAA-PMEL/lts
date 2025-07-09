@@ -7,7 +7,10 @@
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/keo_hourly",
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/papa_hourly_temp",
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/pirata_hourly_temp",
-            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_temp"
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_temp",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/NTAS_met",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/WHOTS_met",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/Stratus_met"
         ]
     },
     "salinity": {
@@ -18,7 +21,10 @@
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/keo_hourly",
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/papa_hourly_psal",
             "https://data.pmel.noaa.gov/pmel/erddap/tabledap/pirata_hourly_psal",
-            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_psal"
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/rama_hourly_psal",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/NTAS_met",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/Stratus_met",
+            "https://data.pmel.noaa.gov/pmel/erddap/tabledap/WHOTS_met"
         ]
     }
 }
