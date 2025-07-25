@@ -1,4 +1,4 @@
---extra-index-url https://viz-temp.pmel.noaa.gov/packages
+--extra-index-url https://viz.pmel.noaa.gov/packages
 plotly>=6.0.1
 gunicorn
 pandas
