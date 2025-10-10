@@ -1,4 +1,3 @@
---extra-index-url https://viz.pmel.noaa.gov/packages
 plotly>=6.0.1
 gunicorn
 pandas
@@ -11,4 +10,5 @@ diskcache
 dash-ag-grid
 SQLAlchemy
 dash-enterprise-libraries==1.5.1
+dash[diskcache]
 git+https://github.com/noaaroland/sdig.git

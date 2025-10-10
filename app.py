@@ -166,6 +166,13 @@ app.layout = ddk.App(theme=theme.theme, children=[
     dcc.Store(id='xrange'),
     dcc.Store(id='factor'),
     html.Div(id='data-div', style={'display': 'none'}),
+    html.Div(style={"font-size":".73em", 'padding': "10px", 'margin':'5px', "border": "2px solid red"},
+                children=[
+                    "The U.S. government is closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. To learn more, visit ",
+                    dcc.Link(href="https://www.commerce.gov/news/blog", children=["commerce.gov."]),
+                    "  For the latest forecasts and critical weather information, visit ",
+                    dcc.Link(href="https://weather.gov", children="weather.gov.")
+                ]),
     ddk.Card(width=.3, children=[
         ddk.Card(width=1, children=[
             ddk.Modal(hide_target=True, target_id='download-card', width='225px', height='380', children=[
