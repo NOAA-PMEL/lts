@@ -8,7 +8,7 @@ colorcet
 celery
 diskcache
 dash-ag-grid
-SQLAlchemy
+SQLAlchemy>=2.0
 dash-enterprise-libraries==1.5.1
 dash[diskcache]
 git+https://github.com/noaaroland/sdig.git

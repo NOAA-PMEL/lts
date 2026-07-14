@@ -1,6 +1,6 @@
 # Dash
 from dash_enterprise_libraries import EnterpriseDash
-from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, exceptions, no_update, exceptions, ctx
+from dash import get_asset_url, html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, exceptions, no_update, exceptions, ctx
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
@@ -28,6 +28,8 @@ from sdig.erddap.info import Info
 import constants
 
 import theme
+
+from sqlalchemy import text
 
 data_url_base = 'https://data.pmel.noaa.gov/pmel/'
 nobs_url_base = 'http://hazy.pmel.noaa.gov:8140/'
@@ -166,13 +168,13 @@ app.layout = ddk.App(theme=theme.theme, children=[
     dcc.Store(id='xrange'),
     dcc.Store(id='factor'),
     html.Div(id='data-div', style={'display': 'none'}),
-    html.Div(style={"font-size":".73em", 'padding': "10px", 'margin':'5px', "border": "2px solid red"},
-                children=[
-                    "The U.S. government is closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. To learn more, visit ",
-                    dcc.Link(href="https://www.commerce.gov/news/blog", children=["commerce.gov."]),
-                    "  For the latest forecasts and critical weather information, visit ",
-                    dcc.Link(href="https://weather.gov", children="weather.gov.")
-                ]),
+    # html.Div(style={"font-size":".73em", 'padding': "10px", 'margin':'5px', "border": "2px solid red"},
+    #             children=[
+    #                 "The U.S. government is closed. This site will not be updated; however, NOAA websites and social media channels necessary to protect lives and property will be maintained. To learn more, visit ",
+    #                 dcc.Link(href="https://www.commerce.gov/news/blog", children=["commerce.gov."]),
+    #                 "  For the latest forecasts and critical weather information, visit ",
+    #                 dcc.Link(href="https://weather.gov", children="weather.gov.")
+    #             ]),
     ddk.Card(width=.3, children=[
         ddk.Card(width=1, children=[
             ddk.Modal(hide_target=True, target_id='download-card', width='225px', height='380', children=[
@@ -222,7 +224,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
     ddk.Card(style={'margin-bottom': '10px'}, children=[
         ddk.Block(children=[
             ddk.Block(width=.08, children=[
-                html.Img(src='https://www.pmel.noaa.gov/sites/default/files/PMEL-meatball-logo-sm.png',
+                html.Img(src=get_asset_url('noaa-logo-rgb-2022.png'),
                             height=100,
                             width=100),
             ]),
@@ -369,7 +371,8 @@ def update_platform_state(in_start_date, in_end_date, in_data_question,):
         vars_to_get.append('site_code')
         vars_string = ','.join(vars_to_get)
         with constants.postgres_engine.connect() as conn:
-            have = pd.read_sql(f'SELECT {vars_string} FROM {nobs_table} WHERE {time_constraint}', con=conn)
+            query = text(f"SELECT {vars_string} FROM {nobs_table} WHERE {time_constraint}")
+            have = pd.read_sql(query, con=conn)
         locations_to_map = None
         for dataset_to_check in config[in_data_question]['datasets']:
             ltm = locations.loc[locations['url']==dataset_to_check]
