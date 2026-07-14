@@ -9,6 +9,6 @@ celery
 diskcache
 dash-ag-grid
 SQLAlchemy>=2.0
-dash-enterprise-libraries==1.5.1
+dash-enterprise-libraries
 dash[diskcache]
 git+https://github.com/noaaroland/sdig.git
