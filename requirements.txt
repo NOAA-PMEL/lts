@@ -1,4 +1,4 @@
---index-url https://dash-temp.pmel.noaa.gov/packages
+--index-url https://viz.pmel.noaa.gov/packages
 --extra-index-url https://pypi.org/simple
 plotly>=6.0.1
 gunicorn
