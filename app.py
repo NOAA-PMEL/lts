@@ -202,6 +202,7 @@ app.layout = ddk.App(theme=theme.theme, children=[
                                     step=month_step,
                                     marks=time_marks,
                                     updatemode='mouseup',
+                                    allow_direct_input=False,
                                     allowCross=False)
             ])
         ]),
